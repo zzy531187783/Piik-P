@@ -17,7 +17,11 @@ The current local review delivery pairs the Windows x64 App with the Linux
 x64 Server and their shared Web bundle. The extracted Windows App started
 its native WebView and received live video. The extracted Linux Server retained
 private-room access and history after the creator left and the service restarted.
-Android evidence covers an earlier protocol generation. Package receipts identify
+The Windows App installs for one user, registers a Start Menu shortcut and
+uninstall entry, and reports a trusted update state from its signed file
+manifest; publication derives a changed-file delta from the previous stable
+package. Repository signing identity, beta feed and a published-delta acceptance
+remain open. Android evidence covers an earlier protocol generation. Package receipts identify
 the exact artifacts. [Verification scope](./verification-status.md)
 
 The channel owns user identity and the room directory. Lightweight channels put the

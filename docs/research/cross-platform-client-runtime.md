@@ -472,6 +472,13 @@ The [signing procedure](../operations/github.md#app-update-signing) defines publ
 key custody; the production signing identity has not been configured.
 The first updater-capable App requires an ordinary installation of its trust root.
 
+Follow-up 2026-11-21: the signed index carries one file manifest per App package,
+and publication derives a changed-file delta from the previous stable Windows
+package. The updater assembles a delta over the installed directory, verifies the
+complete signed file manifest, and falls back to the complete package; a local
+Ed25519 identity and a two-version package pair exercised the path. The repository
+identity, beta feed and a published-delta acceptance remain open.
+
 For the requested faster-line choice, compare a bounded initial portion of at most
 two actual downloads of the same signed artifact, then cancel the losing transfer.
 API latency alone does not measure package transfer. Downloading can coexist with

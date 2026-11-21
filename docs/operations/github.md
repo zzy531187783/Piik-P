@@ -114,6 +114,13 @@ This prepares metadata only; it does not publish or modify installed Apps. The
 3.0 internal candidates do not have a public beta-update feed. Configure the real
 signing identity before distributing a package that promises automatic updates.
 
+Publication also derives one changed-file delta for the Windows App from the
+previous stable release when that package is available. The signed index lists
+each delta with its changed-file records; an App uses a delta only while its
+installed files still match everything the delta does not replace, verifies the
+complete signed file manifest after assembling it, and falls back to the complete
+package on any failure. The first updater-capable release has no delta.
+
 ## AtomGit Download Mirror
 
 [AtomGit TNTcraftHIM/Piik](https://atomgit.com/TNTcraftHIM/Piik) is the public

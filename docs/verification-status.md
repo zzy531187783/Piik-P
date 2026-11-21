@@ -282,6 +282,12 @@ owns adaptation behavior and recovery measurements.
 
 ### Windows And Android
 
+Local Windows controls passed for per-user installation and uninstallation,
+single-instance activation, the packaged update trust-root state (`idle`), and
+changed-file delta assembly over a two-version package pair (66 files, 24
+changed, rebuilt tree equal to the signed manifest). Published delta delivery,
+installer distribution and repository key configuration remain unverified.
+
 Windows software H264 processing adaptation has a controlled encoding and
 independent decoding check: an injected encode-stage delay produced a lower
 resolution through the existing policy, while preserved slow-consumer timings

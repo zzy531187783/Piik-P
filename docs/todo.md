@@ -188,9 +188,11 @@ the feedback period; they do not delay that delivery.
   [versioning contract](./standards/versioning.md#public-compatibility-promise)
   to future API/plugin boundaries; introduce storage conversion only for a real
   representation change, without retaining obsolete private-beta interfaces.
-- [ ] **App update distribution.** Configure the production signing identity and
-  decide the beta-feed policy before distributing updater-capable packages;
-  retain manual download. The
+- [ ] **App update distribution.** Install the offline signing identity as the
+  repository variable `PIIK_UPDATE_PUBLIC_KEY` and Actions secret
+  `PIIK_UPDATE_SIGNING_KEY`, decide the beta-feed policy, and exercise one
+  published changed-file delta end to end before distributing updater-capable
+  packages; retain manual download. The
   [delivery proposal](./research/cross-platform-client-runtime.md#30-app-update-delivery)
   keeps authority, active sessions and data outside the download operation.
 - [ ] **Managed one-click deployment.** Validate an ordinary Piik room and data
