@@ -479,6 +479,22 @@ jobs:
           pattern: piik-app-*-${{ github.sha }}
           path: ${{ runner.temp }}/publish-release
           merge-multiple: true
+      - name: Prepare the Windows App delta
+        run: |
+          previous="$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+            --limit 1 --json tagName --jq '.[0].tagName')"
+          if [ -z "$previous" ] || [ "$previous" = "$PIIK_RELEASE_VERSION" ]; then
+            echo "No previous stable release to compare."
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/previous-app"
+          gh release download "$previous" --repo "$GITHUB_REPOSITORY" \
+            --pattern piik-app-windows-amd64.zip --dir "$RUNNER_TEMP/previous-app"
+          node scripts/prepare-app-deltas.mjs "$RUNNER_TEMP/publish-release" \
+            "$RUNNER_TEMP/previous-app/piik-app-windows-amd64.zip" "$previous"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PIIK_RELEASE_VERSION: ${{ needs.validate.outputs.version }}
       - name: Download the verified container
         uses: actions/download-artifact@v8
         with:

@@ -97,7 +97,7 @@ export function readUpdateArtifacts(release, directory, publicKey = process.env.
   if (!isDeepStrictEqual(JSON.parse(bytes.toString("utf8")), updateIndex(release))) throw new Error("Update index differs from verified release artifacts");
   const updateFiles = paths.map((path, index) => ({ name: basename(path), path,
     size: [bytes, signature][index].length, sha256: createHash("sha256").update([bytes, signature][index]).digest("hex") }));
-  return { ...release, files: [...release.packagesByTarget.values(), ...updateFiles], updateFiles };
+  return { ...release, files: [...release.packagesByTarget.values(), ...(release.deltaFiles ?? []), ...updateFiles], updateFiles };
 }
 
 // Both publishers recover the original public bytes; only the caller chooses their directory.
@@ -162,6 +162,7 @@ export function readReleaseArtifacts(directory, version, revision, { publicKey =
   const files = new Map();
   const packages = [];
   const servers = [];
+  const deltaFiles = [];
   const targets = new Set();
   const packagesByTarget = new Map();
   function asset(name) {
@@ -201,7 +202,10 @@ export function readReleaseArtifacts(directory, version, revision, { publicKey =
       // their own descriptors until they gain an updater.
       archive.files = appFileManifest(descriptor, name);
       const deltas = appDeltas(descriptor, target, archive.files, asset);
-      if (deltas.length > 0) archive.deltas = deltas;
+      if (deltas.length > 0) {
+        archive.deltas = deltas;
+        for (const delta of deltas) deltaFiles.push(asset(delta.artifact));
+      }
     }
     packages.push(archive);
     packagesByTarget.set(target, archive);
@@ -211,5 +215,6 @@ export function readReleaseArtifacts(directory, version, revision, { publicKey =
     throw new Error("Publication requires every registered Server and App target");
   }
   // Build sidecars stay local; verified update metadata is distributed unchanged.
-  return readUpdateArtifacts({ version, revision, files: packages, servers, targets: [...targets], packagesByTarget, updateFiles: [] }, updateDirectory, publicKey);
+  return readUpdateArtifacts({ version, revision, files: [...packages, ...deltaFiles], deltaFiles,
+    servers, targets: [...targets], packagesByTarget, updateFiles: [] }, updateDirectory, publicKey);
 }

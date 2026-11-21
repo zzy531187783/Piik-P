@@ -53,7 +53,7 @@ describe("signed update index", () => {
     const options = { publicKey: publicHex };
     for (const name of ["update.json", "update.json.sig"]) copyFileSync(join(root, "signed", name), join(root, name));
     const release = readReleaseArtifacts(root, version, revision, options);
-    expect(release.files).toHaveLength(11);
+    expect(release.files).toHaveLength(12);
     expect(release.updateFiles.map((file: { name: string }) => file.name)).toEqual(["update.json", "update.json.sig"]);
     expect(release.packagesByTarget.size).toBe(9);
     expect(release.servers).toHaveLength(3);
@@ -78,11 +78,11 @@ describe("signed update index", () => {
     expect(existsSync(join(root, "signed-update"))).toBe(false);
     const first = dryRun(pem);
     expect(first.status, first.stderr).toBe(0);
-    expect(JSON.parse(first.stdout).files).toBe(11);
+    expect(JSON.parse(first.stdout).files).toBe(12);
     const bytes = readFileSync(join(root, "signed-update/update.json"));
     expect(dryRun("").status).toBe(0);
     expect(readFileSync(join(root, "signed-update/update.json"))).toEqual(bytes);
-    expect(readReleaseArtifacts(root, version, revision).files).toHaveLength(9);
+    expect(readReleaseArtifacts(root, version, revision).files).toHaveLength(10);
     writeFileSync(join(root, "signed-update/update.json"), Buffer.concat([bytes, Buffer.from(" ")]));
     expect(dryRun(pem).stderr).toContain("signature mismatch");
   });
@@ -105,7 +105,7 @@ describe("signed update index", () => {
           ...(asset.deltas ? { deltas: asset.deltas } : {}) }]),
     ) });
     expect(Object.keys(index.targets)).toEqual([...release.targets].sort());
-    expect(release.files).toHaveLength(9);
+    expect(release.files).toHaveLength(10);
     expect(release.servers).toHaveLength(3);
     expect(run("second").status).toBe(0);
     expect(readFileSync(join(root, "second/update.json"))).toEqual(bytes);
