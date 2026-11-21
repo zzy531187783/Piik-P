@@ -32,6 +32,8 @@ struct Plan {
     parent: u32,
     selection: Selection,
     layout: BundleLayout,
+    #[serde(default)]
+    delta: Option<String>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -155,6 +157,7 @@ fn retire_previous(installation: &Installation) -> Result<()> {
         "update.json.sig",
         "package.zip",
         "incoming",
+        "delta",
         "previous",
         "result.json",
     ];
@@ -208,6 +211,7 @@ pub(super) async fn handoff(
         parent: std::process::id(),
         selection: prepared.selection,
         layout: options.layout.clone(),
+        delta: prepared.delta.as_ref().map(|delta| delta.from.clone()),
     };
     matching_workspace(&workspace, &plan)?;
     fs::copy(&options.executable, workspace.join(HELPER))?;
@@ -362,16 +366,29 @@ pub(super) fn run(path: PathBuf) -> Result<()> {
             &plan.selection,
             &options.target,
         )?;
-        package::verify_archive(&workspace.join("package.zip"), &package)?;
-        package::extract(
-            &workspace.join("package.zip"),
-            &workspace.join("incoming"),
-            &plan.layout.entrypoint,
-        )?;
-        package::verify_files(&workspace.join("incoming"), &package.files)?;
+        let archive = workspace.join("package.zip");
+        let incoming = workspace.join("incoming");
+        match plan.delta.as_ref() {
+            Some(from) => {
+                let delta = package
+                    .deltas
+                    .iter()
+                    .find(|delta| &delta.from == from)
+                    .context("Signed release has no matching delta")?;
+                package::verify_delta_archive(&archive, delta)?;
+                let stage = workspace.join("delta");
+                package::extract_delta(&archive, &stage)?;
+                package::verify_delta_files(&stage, delta, &package)?;
+                package::assemble_delta(&plan.root, &stage, &package, delta, &incoming)?;
+            }
+            None => {
+                package::verify_archive(&archive, &package)?;
+                package::extract(&archive, &incoming, &plan.layout.entrypoint)?;
+                package::verify_files(&incoming, &package.files)?;
+            }
+        }
         ensure!(
-            fs::read_to_string(workspace.join("incoming/REVISION"))?.trim()
-                == plan.selection.revision,
+            fs::read_to_string(incoming.join("REVISION"))?.trim() == plan.selection.revision,
             "New package revision differs from signed release"
         );
         println!("PIIK_UPDATE_READY");
@@ -440,6 +457,7 @@ mod tests {
                 revision: "a".repeat(40),
             },
             layout,
+            delta: None,
         };
         (directory, plan, workspace)
     }

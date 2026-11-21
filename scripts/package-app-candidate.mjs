@@ -7,10 +7,14 @@ import {
   createWriteStream,
   existsSync,
   mkdirSync,
+  mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -22,6 +26,7 @@ import { createZip, extractZip, tarExecutable } from "./archive-tool.mjs";
 import { assertBuildInputRetained, assertCleanRevision, resetBuildWorkspace } from "./build-workspace.mjs";
 import { buildVersion } from "./release-version.mjs";
 import { checkAppPackageStatic, checkAppPackageRuntime } from "./check-app-package.mjs";
+import { createAppDelta } from "./package-app-delta.mjs";
 import { compareFileRecords, fileRecords, sha256 } from "./package-files.mjs";
 
 function fail(message) {
@@ -64,11 +69,16 @@ async function download(url, path) {
 
 const { values, positionals } = parseArgs({
   args: process.argv.slice(2), allowPositionals: true,
-  options: { "tunnel-asset": { type: "string" }, web: { type: "string" } },
+  options: {
+    "tunnel-asset": { type: "string" },
+    web: { type: "string" },
+    delta: { type: "string", multiple: true },
+    "delta-from": { type: "string", multiple: true },
+  },
 });
 if (positionals.length !== 2) {
   fail(
-    "Usage: node scripts/package-app-candidate.mjs <target> <new-output-directory> [--tunnel-asset <raw-release-asset>] [--web <built-web-directory>]",
+    "Usage: node scripts/package-app-candidate.mjs <target> <new-output-directory> [--tunnel-asset <raw-release-asset>] [--web <built-web-directory>] [--delta <delta-descriptor>] [--delta-from <from-version>=<previous-package.zip>]",
   );
 }
 
@@ -135,10 +145,48 @@ try {
   await checkAppPackageRuntime(extractedRoot, target, version, revision, temporaryRoot, repositoryRoot);
   assertCleanRevision(repositoryRoot, revision);
   const digest = sha256(archive);
+  // Delta artifacts stay beside the package; the signed index binds each record.
+  const deltas = [];
+  const deltaStage = mkdtempSync(join(tmpdir(), "piik-app-delta-"));
+  try {
+    for (const spec of values["delta-from"] ?? []) {
+      const separator = spec.indexOf("=");
+      if (separator <= 0) fail("--delta-from requires <from-version>=<previous-package.zip>");
+      const fromVersion = spec.slice(0, separator);
+      const descriptor = createAppDelta({
+        currentDirectory: packageRoot,
+        previousArchive: resolve(spec.slice(separator + 1)),
+        fromVersion,
+        target: target.id,
+        outputDirectory: join(deltaStage, fromVersion),
+      });
+      copyFileSync(join(deltaStage, fromVersion, descriptor.artifact), join(outputRoot, descriptor.artifact));
+      copyFileSync(join(deltaStage, fromVersion, `${descriptor.artifact}.json`),
+        join(outputRoot, `${descriptor.artifact}.json`));
+      deltas.push(descriptor);
+    }
+  } finally {
+    rmSync(deltaStage, { recursive: true, force: true });
+  }
+  for (const descriptorPath of values.delta ?? []) {
+    const descriptor = JSON.parse(readFileSync(resolve(descriptorPath), "utf8"));
+    if (typeof descriptor.from !== "string" || typeof descriptor.artifact !== "string" ||
+        !Number.isSafeInteger(descriptor.size) || descriptor.size <= 0 ||
+        !/^[0-9a-f]{64}$/.test(descriptor.sha256) ||
+        !Array.isArray(descriptor.files) || descriptor.files.length === 0) {
+      fail(`Delta descriptor is invalid: ${descriptorPath}`);
+    }
+    const artifact = join(outputRoot, descriptor.artifact);
+    if (!existsSync(artifact) || statSync(artifact).size !== descriptor.size || sha256(artifact) !== descriptor.sha256) {
+      fail(`Delta artifact does not match its descriptor: ${descriptor.artifact}`);
+    }
+    deltas.push(descriptor);
+  }
   writeFileSync(join(outputRoot, `${archiveName}.sha256`), `${digest}  ${archiveName}\n`, "ascii");
   writeFileSync(join(outputRoot, archiveName.replace(/\.zip$/, ".release.json")),
     `${JSON.stringify({ schema: 2, version, revision, target: target.id,
-      artifact: archiveName, artifactSha256: digest, files }, null, 2)}\n`);
+      artifact: archiveName, artifactSha256: digest, files,
+      ...(deltas.length ? { deltas } : {}) }, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify({
     target: target.id,
     version,

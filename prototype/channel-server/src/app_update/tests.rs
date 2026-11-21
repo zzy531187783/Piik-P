@@ -608,3 +608,103 @@ fn extracted_files_must_match_the_signed_manifest() {
     fs::write(stage.join("web/extra.txt"), b"extra").unwrap();
     assert!(package::verify_files(&stage, &files).is_err());
 }
+
+#[test]
+fn signed_delta_must_reference_release_files() {
+    let key = signing_key();
+    let selection = Selection {
+        version: "v3.0.2".into(),
+        revision: SOURCE.into(),
+    };
+    let public_key = key.public_key().as_ref().try_into().unwrap();
+    let delta = serde_json::json!({
+        "from":"v3.0.1","artifact":"piik-app-windows-amd64-delta-v3.0.1.zip",
+        "size":1,"sha256":"0".repeat(64),"files":[manifest_json()[0].clone()],
+    });
+    let verify = |delta: serde_json::Value| {
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "schema":1,"version":"v3.0.2","revision":SOURCE,
+            "targets":{"windows-amd64":{"artifact":"piik-app-windows-amd64.zip","size":1,
+                "sha256":"0".repeat(64),"files":manifest_json(),"deltas":[delta]}},
+        }))
+        .unwrap();
+        package::verify_index(
+            &public_key,
+            &bytes,
+            key.sign(&bytes).as_ref(),
+            &selection,
+            "windows-amd64",
+        )
+    };
+    assert!(verify(delta.clone()).is_ok());
+    let mut foreign = delta.clone();
+    foreign["files"][0]["path"] = serde_json::json!("web/not-in-release.txt");
+    assert!(verify(foreign).is_err());
+    let mut same_version = delta.clone();
+    same_version["from"] = serde_json::json!("v3.0.2");
+    assert!(verify(same_version).is_err());
+    let mut wrong_artifact = delta;
+    wrong_artifact["artifact"] = serde_json::json!("delta.zip");
+    assert!(verify(wrong_artifact).is_err());
+}
+
+#[test]
+fn delta_assembly_rebuilds_the_complete_tree() {
+    let directory = tempfile::tempdir().unwrap();
+    let current = directory.path().join("current");
+    let stage = directory.path().join("stage");
+    let incoming = directory.path().join("incoming");
+    let contents = archive_contents();
+    let changed = ["piik-app.exe", "web/index.html", "REVISION"];
+    for (relative, bytes) in &contents {
+        let target = current.join(relative);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        let value = if changed.contains(relative) {
+            b"old".to_vec()
+        } else {
+            bytes.clone()
+        };
+        fs::write(&target, value).unwrap();
+    }
+    for (relative, bytes) in &contents {
+        if !changed.contains(relative) {
+            continue;
+        }
+        let target = stage.join(relative);
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, bytes).unwrap();
+    }
+    let files = manifest();
+    let delta = package::Delta {
+        from: "v3.0.1".into(),
+        artifact: "piik-app-windows-amd64-delta-v3.0.1.zip".into(),
+        size: 1,
+        sha256: "0".repeat(64),
+        files: files
+            .iter()
+            .filter(|file| changed.contains(&file.path.as_str()))
+            .cloned()
+            .collect(),
+    };
+    let package = package::Package {
+        artifact: "piik-app-windows-amd64.zip".into(),
+        size: 1,
+        sha256: "0".repeat(64),
+        files,
+        deltas: vec![delta.clone()],
+    };
+    assert!(package::delta_is_applicable(&current, &package, &delta));
+    package::verify_delta_files(&stage, &delta, &package).unwrap();
+    package::assemble_delta(&current, &stage, &package, &delta, &incoming).unwrap();
+    package::verify_files(&incoming, &package.files).unwrap();
+    fs::write(current.join("web/padding.bin"), b"tampered").unwrap();
+    assert!(!package::delta_is_applicable(&current, &package, &delta));
+    assert!(package::assemble_delta(
+        &current,
+        &stage,
+        &package,
+        &delta,
+        &directory.path().join("broken")
+    )
+    .is_err());
+}

@@ -21,6 +21,10 @@ let root: string;
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "piik-update-index-"));
+  const deltaArtifact = "piik-app-windows-amd64-delta-v2.9.0.zip";
+  writeFileSync(join(root, deltaArtifact), "delta");
+  const delta = { from: "v2.9.0", artifact: deltaArtifact, size: 5, sha256: sha("delta"),
+    files: [appFiles[0]] };
   for (const target of [...SERVER_PACKAGE_TARGETS, ...APP_PACKAGE_TARGETS, ANDROID_APP_PACKAGE_TARGET]) {
     const server = SERVER_PACKAGE_TARGETS.some(candidate => candidate.id === target.id);
     const artifact = `${target.id}.${target.id === "android-universal" ? "apk" : "zip"}`;
@@ -28,7 +32,7 @@ beforeEach(() => {
     writeFileSync(join(root, `${target.id}.release.json`), JSON.stringify({
       schema: 2, version, revision, target: target.id, artifact, artifactSha256: sha(target.id),
       ...(server ? { manifest: `${target.id}.manifest.tsv`, manifestSha256: sha("manifest") } : {}),
-      ...(target.id === "windows-amd64" ? { files: appFiles } : {}),
+      ...(target.id === "windows-amd64" ? { files: appFiles, deltas: [delta] } : {}),
     }));
     if (server) writeFileSync(join(root, `${target.id}.manifest.tsv`), "manifest");
     else writeFileSync(join(root, `${artifact}.sha256`), `${sha(target.id)}  ${artifact}\n`);
@@ -97,7 +101,8 @@ describe("signed update index", () => {
     expect(index).toEqual({ schema: 1, version, revision, targets: Object.fromEntries(
       [...release.packagesByTarget].map(([target, asset]) => [target,
         { artifact: asset.name, size: asset.size, sha256: asset.sha256,
-          ...(asset.files ? { files: asset.files } : {}) }]),
+          ...(asset.files ? { files: asset.files } : {}),
+          ...(asset.deltas ? { deltas: asset.deltas } : {}) }]),
     ) });
     expect(Object.keys(index.targets)).toEqual([...release.targets].sort());
     expect(release.files).toHaveLength(9);
@@ -122,6 +127,24 @@ describe("signed update index", () => {
     writeFileSync(join(root, "windows-amd64.zip"), "changed bytes");
     expect(run().stderr).toContain("checksum mismatch");
     expect(existsSync(join(root, "signed"))).toBe(false);
+  });
+
+  it("binds each delta to release files and the published delta artifact", () => {
+    const descriptor = join(root, "windows-amd64.release.json");
+    const original = JSON.parse(readFileSync(descriptor, "utf8"));
+    const verify = (deltas: unknown) => {
+      writeFileSync(descriptor, JSON.stringify({ ...original, deltas }));
+      return readReleaseArtifacts(root, version, revision);
+    };
+    const valid = verify(original.deltas);
+    expect(valid.packagesByTarget.get("windows-amd64").deltas[0].from).toBe("v2.9.0");
+    const foreign = structuredClone(original.deltas);
+    foreign[0].files[0].path = "web/not-in-release.txt";
+    expect(() => verify(foreign)).toThrow("does not match the release");
+    const wrongDigest = structuredClone(original.deltas);
+    wrongDigest[0].sha256 = "0".repeat(64);
+    expect(() => verify(wrongDigest)).toThrow("checksum mismatch");
+    writeFileSync(descriptor, JSON.stringify(original));
   });
 
   it("requires the environment signing key to match the App trust root without exposing it", () => {

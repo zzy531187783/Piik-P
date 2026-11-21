@@ -112,7 +112,8 @@ async fn finish(
     mut response: Response,
     prefix: Vec<u8>,
     file: &mut File,
-    package: &Package,
+    size: u64,
+    sha256: &str,
     source: &'static str,
     progress: &impl Fn(u64, u64, &'static str),
 ) -> Result<()> {
@@ -123,22 +124,69 @@ async fn finish(
     let mut hash = digest::Context::new(&digest::SHA256);
     hash.update(&prefix);
     file.write_all(&prefix)?;
-    progress(received, package.size, source);
+    progress(received, size, source);
     while let Some(chunk) = response.chunk().await? {
         received = received
             .checked_add(chunk.len() as u64)
             .context("Update body is too large")?;
-        ensure!(received <= package.size, "Update body exceeds signed size");
+        ensure!(received <= size, "Update body exceeds signed size");
         hash.update(&chunk);
         file.write_all(&chunk)?;
-        progress(received, package.size, source);
+        progress(received, size, source);
     }
     ensure!(
-        received == package.size
-            && hash.finish().as_ref() == package::hex::<32>(&package.sha256).unwrap(),
+        received == size && hash.finish().as_ref() == package::hex::<32>(sha256).unwrap(),
         "Downloaded package does not match the signed release"
     );
     file.sync_all()?;
+    Ok(())
+}
+
+/// Stream one signed artifact, racing the two providers for the same bytes.
+async fn download_artifact(
+    client: &Client,
+    options: &Options,
+    selection: &Selection,
+    artifact: &str,
+    size: u64,
+    sha256: &str,
+    file: &mut File,
+    progress: &impl Fn(u64, u64, &'static str),
+) -> Result<()> {
+    let urls = options
+        .providers
+        .each_ref()
+        .map(|provider| provider.join(&format!("{}/{}", selection.version, artifact)));
+    let urls = [urls[0].clone()?, urls[1].clone()?];
+    // The losing future owns its Response. Leaving this scope cancels that body;
+    // the winner returns the same Response, including every byte already read.
+    let (winner, response) = {
+        let first = prefix(client, &urls[0], size);
+        let second = prefix(client, &urls[1], size);
+        tokio::pin!(first, second);
+        tokio::select! {
+            result = &mut first => match result { Ok(response) => (0, response), Err(_) => (1, second.await?) },
+            result = &mut second => match result { Ok(response) => (1, response), Err(_) => (0, first.await?) },
+        }
+    };
+    let (response, bytes) = response;
+    if finish(response, bytes, file, size, sha256, SOURCES[winner], progress)
+        .await
+        .is_err()
+    {
+        let other = 1 - winner;
+        let (response, bytes) = prefix(client, &urls[other], size).await?;
+        finish(
+            response,
+            bytes,
+            file,
+            size,
+            sha256,
+            SOURCES[other],
+            progress,
+        )
+        .await?;
+    }
     Ok(())
 }
 
@@ -165,42 +213,35 @@ pub(super) async fn prepare(
         .write(true)
         .create_new(true)
         .open(directory.path().join("package.zip"))?;
-    let urls = options
-        .providers
-        .each_ref()
-        .map(|provider| provider.join(&format!("{}/{}", selection.version, package.artifact)));
-    let urls = [urls[0].clone()?, urls[1].clone()?];
-    // The losing future owns its Response. Leaving this scope cancels that body;
-    // the winner returns the same Response, including every byte already read.
-    let (winner, response) = {
-        let first = prefix(&client, &urls[0], package.size);
-        let second = prefix(&client, &urls[1], package.size);
-        tokio::pin!(first, second);
-        tokio::select! {
-            result = &mut first => match result { Ok(response) => (0, response), Err(_) => (1, second.await?) },
-            result = &mut second => match result { Ok(response) => (1, response), Err(_) => (0, first.await?) },
-        }
-    };
-    let (response, bytes) = response;
-    if finish(
-        response,
-        bytes,
-        &mut file,
-        &package,
-        SOURCES[winner],
-        &progress,
-    )
-    .await
-    .is_err()
-    {
-        let other = 1 - winner;
-        let (response, bytes) = prefix(&client, &urls[other], package.size).await?;
-        finish(
-            response,
-            bytes,
+    // Prefer the published delta for this exact installation; any download
+    // failure falls back to the complete package.
+    let delta = match package::select_delta(&package, options, installation) {
+        Some(delta) => match download_artifact(
+            &client,
+            options,
+            selection,
+            &delta.artifact,
+            delta.size,
+            &delta.sha256,
             &mut file,
-            &package,
-            SOURCES[other],
+            &progress,
+        )
+        .await
+        {
+            Ok(()) => Some(delta),
+            Err(_) => None,
+        },
+        None => None,
+    };
+    if delta.is_none() {
+        download_artifact(
+            &client,
+            options,
+            selection,
+            &package.artifact,
+            package.size,
+            &package.sha256,
+            &mut file,
             &progress,
         )
         .await?;
@@ -210,5 +251,6 @@ pub(super) async fn prepare(
         directory,
         selection: selection.clone(),
         operation,
+        delta,
     })
 }

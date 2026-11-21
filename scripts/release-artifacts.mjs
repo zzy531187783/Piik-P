@@ -9,7 +9,8 @@ export function updateIndex(release) {
   return { schema: 1, version: release.version, revision: release.revision,
     targets: Object.fromEntries([...release.packagesByTarget].sort(([a], [b]) => a.localeCompare(b)).map(([target, asset]) =>
       [target, { artifact: asset.name, size: asset.size, sha256: asset.sha256,
-        ...(asset.files ? { files: asset.files } : {}) }])) };
+        ...(asset.files ? { files: asset.files } : {}),
+        ...(asset.deltas ? { deltas: asset.deltas } : {}) }])) };
 }
 
 // The App publishes one signed file manifest so an update can bind every
@@ -39,6 +40,49 @@ function appFileManifest(descriptor, name) {
     if (!seen.has(required.toLowerCase())) throw new Error(`App release file manifest is incomplete: ${name}`);
   }
   return files.map(file => ({ path: file.path, size: file.size, sha256: file.sha256 }));
+}
+
+// A delta may only replace files the full manifest already binds, and its
+// published artifact must match the descriptor byte for byte.
+function appDeltas(descriptor, target, files, asset) {
+  if (descriptor.deltas === undefined) return [];
+  if (!Array.isArray(descriptor.deltas) || descriptor.deltas.length === 0 || descriptor.deltas.length > 8) {
+    throw new Error(`App delta list is invalid: ${target}`);
+  }
+  const full = new Map(files.map(file => [file.path.toLowerCase(), file]));
+  const versions = new Set();
+  const artifacts = new Set();
+  return descriptor.deltas.map(delta => {
+    if (!delta || typeof delta.from !== "string" ||
+        !/^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(delta.from) ||
+        delta.from === descriptor.version || versions.has(delta.from)) {
+      throw new Error(`App delta source version is invalid: ${target}`);
+    }
+    versions.add(delta.from);
+    const expectedArtifact = `piik-app-${target}-delta-${delta.from}.zip`;
+    if (delta.artifact !== expectedArtifact || artifacts.has(delta.artifact) ||
+        !Number.isSafeInteger(delta.size) || delta.size <= 0 ||
+        typeof delta.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(delta.sha256) ||
+        !Array.isArray(delta.files) || delta.files.length === 0) {
+      throw new Error(`App delta metadata is invalid: ${target}`);
+    }
+    artifacts.add(delta.artifact);
+    const artifact = asset(delta.artifact);
+    if (artifact.size !== delta.size || artifact.sha256 !== delta.sha256) {
+      throw new Error(`App delta checksum mismatch: ${delta.artifact}`);
+    }
+    const changed = new Set();
+    const records = delta.files.map(file => {
+      const expected = full.get(typeof file?.path === "string" ? file.path.toLowerCase() : "");
+      if (!expected || expected.path !== file.path || expected.size !== file.size ||
+          expected.sha256 !== file.sha256 || changed.has(file.path.toLowerCase())) {
+        throw new Error(`App delta file does not match the release: ${target}`);
+      }
+      changed.add(file.path.toLowerCase());
+      return { path: file.path, size: file.size, sha256: file.sha256 };
+    });
+    return { from: delta.from, artifact: delta.artifact, size: delta.size, sha256: delta.sha256, files: records };
+  });
 }
 
 export function readUpdateArtifacts(release, directory, publicKey = process.env.PIIK_UPDATE_PUBLIC_KEY) {
@@ -156,6 +200,8 @@ export function readReleaseArtifacts(directory, version, revision, { publicKey =
       // The Windows App is the only updatable target; other App packages keep
       // their own descriptors until they gain an updater.
       archive.files = appFileManifest(descriptor, name);
+      const deltas = appDeltas(descriptor, target, archive.files, asset);
+      if (deltas.length > 0) archive.deltas = deltas;
     }
     packages.push(archive);
     packagesByTarget.set(target, archive);

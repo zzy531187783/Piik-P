@@ -42,6 +42,17 @@ pub(super) struct PackageFile {
     pub sha256: String,
 }
 
+/// One delta artifact carries only the files that changed from `from`.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Delta {
+    pub from: String,
+    pub artifact: String,
+    pub size: u64,
+    pub sha256: String,
+    pub files: Vec<PackageFile>,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub(super) struct Package {
     pub artifact: String,
@@ -49,6 +60,8 @@ pub(super) struct Package {
     pub sha256: String,
     #[serde(default)]
     pub files: Vec<PackageFile>,
+    #[serde(default)]
+    pub deltas: Vec<Delta>,
 }
 
 #[derive(Deserialize)]
@@ -115,6 +128,7 @@ pub(super) struct Prepared {
     pub directory: tempfile::TempDir,
     pub selection: Selection,
     pub operation: uuid::Uuid,
+    pub delta: Option<Delta>,
 }
 
 pub(super) fn hex<const N: usize>(value: &str) -> Option<[u8; N]> {
@@ -185,7 +199,65 @@ pub(super) fn verify_index(
         "Invalid signed App package"
     );
     validate_package_files(&package)?;
+    validate_deltas(&package, target, &selection.version)?;
     Ok(package)
+}
+
+/// A delta may only carry files that the full signed manifest already binds,
+/// and its `from` version must be an older stable release of this target.
+fn validate_deltas(package: &Package, target: &str, release: &str) -> Result<()> {
+    ensure!(
+        package.deltas.len() <= 8,
+        "Signed App package has too many deltas"
+    );
+    let release_version = semver::Version::parse(release.strip_prefix('v').context("Invalid version")?)?;
+    let full: BTreeMap<String, &PackageFile> = package
+        .files
+        .iter()
+        .map(|file| (file.path.to_ascii_lowercase(), file))
+        .collect();
+    let mut versions = BTreeSet::new();
+    let mut artifacts = BTreeSet::new();
+    for delta in &package.deltas {
+        let version = semver::Version::parse(
+            delta
+                .from
+                .strip_prefix('v')
+                .context("Invalid delta version")?,
+        )?;
+        ensure!(
+            delta.from == format!("v{version}")
+                && version.pre.is_empty()
+                && version.build.is_empty()
+                && version.cmp_precedence(&release_version).is_lt()
+                && versions.insert(delta.from.clone()),
+            "Invalid delta source version"
+        );
+        ensure!(
+            delta.artifact == format!("piik-app-{target}-delta-{}.zip", delta.from)
+                && artifacts.insert(delta.artifact.clone())
+                && delta.size > 0
+                && delta.size <= MAX_PACKAGE_BYTES
+                && hex::<32>(&delta.sha256).is_some()
+                && delta.sha256 == delta.sha256.to_ascii_lowercase(),
+            "Invalid signed App delta"
+        );
+        ensure!(!delta.files.is_empty(), "Signed App delta has no files");
+        let mut paths = BTreeSet::new();
+        for file in &delta.files {
+            let Some(expected) = full.get(&file.path.to_ascii_lowercase()) else {
+                anyhow::bail!("Delta contains a file outside the release manifest");
+            };
+            ensure!(
+                paths.insert(file.path.to_ascii_lowercase())
+                    && file.path == expected.path
+                    && file.size == expected.size
+                    && file.sha256 == expected.sha256,
+                "Delta file does not match the release manifest"
+            );
+        }
+    }
+    Ok(())
 }
 
 /// The signed file manifest binds every extracted path to its exact bytes, so a
@@ -260,25 +332,7 @@ pub(super) fn verify_files(root: &Path, files: &[PackageFile]) -> Result<()> {
                 .get(&key)
                 .with_context(|| format!("Unexpected App file: {relative}"))?;
             ensure!(found.insert(key), "Duplicate App file: {relative}");
-            ensure!(
-                fs::metadata(&path)?.len() == file.size,
-                "App file size changed: {relative}"
-            );
-            let mut source = File::open(&path)?;
-            let mut hash = digest::Context::new(&digest::SHA256);
-            let mut buffer = [0u8; 64 * 1024];
-            loop {
-                let count = source.read(&mut buffer)?;
-                if count == 0 {
-                    break;
-                }
-                hash.update(&buffer[..count]);
-            }
-            ensure!(
-                hash.finish().as_ref()
-                    == hex::<32>(&file.sha256).context("Invalid App file digest")?,
-                "App file digest changed: {relative}"
-            );
+            verify_file(&path, file, &relative)?;
         }
         Ok(())
     }
@@ -295,9 +349,118 @@ pub(super) fn verify_files(root: &Path, files: &[PackageFile]) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn verify_archive(path: &Path, package: &Package) -> Result<()> {
+fn verify_file(path: &Path, file: &PackageFile, label: &str) -> Result<()> {
     ensure!(
-        fs::metadata(path)?.len() == package.size,
+        fs::metadata(path)?.len() == file.size,
+        "App file size changed: {label}"
+    );
+    let mut source = File::open(path)?;
+    let mut hash = digest::Context::new(&digest::SHA256);
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let count = source.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        hash.update(&buffer[..count]);
+    }
+    ensure!(
+        hash.finish().as_ref() == hex::<32>(&file.sha256).context("Invalid App file digest")?,
+        "App file digest changed: {label}"
+    );
+    Ok(())
+}
+
+fn delta_changed(delta: &Delta) -> BTreeMap<String, &PackageFile> {
+    delta
+        .files
+        .iter()
+        .map(|file| (file.path.to_ascii_lowercase(), file))
+        .collect()
+}
+
+/// True when every file the delta does not replace still matches the release.
+pub(super) fn delta_is_applicable(current: &Path, package: &Package, delta: &Delta) -> bool {
+    let changed = delta_changed(delta);
+    package
+        .files
+        .iter()
+        .filter(|file| !changed.contains_key(&file.path.to_ascii_lowercase()))
+        .all(|file| verify_file(&current.join(&file.path), file, &file.path).is_ok())
+}
+
+/// Pick the delta that upgrades this installation, if one is published and the
+/// installed files still match every file that delta does not replace.
+pub(super) fn select_delta(
+    package: &Package,
+    options: &Options,
+    installation: &Installation,
+) -> Option<Delta> {
+    package
+        .deltas
+        .iter()
+        .find(|delta| {
+            delta.from == options.version && delta_is_applicable(&installation.root, package, delta)
+        })
+        .cloned()
+}
+
+/// Verify an extracted delta stage against its signed records.
+pub(super) fn verify_delta_files(root: &Path, delta: &Delta, package: &Package) -> Result<()> {
+    let changed = delta_changed(delta);
+    ensure!(
+        changed.len() == delta.files.len(),
+        "Signed App delta has duplicate files"
+    );
+    for file in &delta.files {
+        let expected = package
+            .files
+            .iter()
+            .find(|candidate| candidate.path == file.path)
+            .context("Delta file is outside the release manifest")?;
+        ensure!(
+            expected.size == file.size && expected.sha256 == file.sha256,
+            "Delta file does not match the release manifest"
+        );
+    }
+    verify_files(root, &delta.files)
+}
+
+/// Build the complete incoming tree: unchanged files come from the installed
+/// program directory, changed files from the verified delta stage.
+pub(super) fn assemble_delta(
+    current: &Path,
+    stage: &Path,
+    package: &Package,
+    delta: &Delta,
+    incoming: &Path,
+) -> Result<()> {
+    let changed = delta_changed(delta);
+    for file in &package.files {
+        let key = file.path.to_ascii_lowercase();
+        let source = if changed.contains_key(&key) {
+            stage.join(&file.path)
+        } else {
+            current.join(&file.path)
+        };
+        let destination = incoming.join(&file.path);
+        fs::create_dir_all(destination.parent().context("App file has no parent")?)?;
+        fs::copy(&source, &destination).with_context(|| format!("Copy {}", file.path))?;
+    }
+    verify_files(incoming, &package.files)
+}
+
+pub(super) fn verify_archive(path: &Path, package: &Package) -> Result<()> {
+    verify_artifact(path, package.size, &package.sha256)
+}
+
+pub(super) fn verify_delta_archive(path: &Path, delta: &Delta) -> Result<()> {
+    verify_artifact(path, delta.size, &delta.sha256)
+}
+
+fn verify_artifact(path: &Path, size: u64, sha256: &str) -> Result<()> {
+    ensure!(
+        fs::metadata(path)?.len() == size,
         "Update package size changed"
     );
     let mut source = File::open(path)?;
@@ -311,7 +474,7 @@ pub(super) fn verify_archive(path: &Path, package: &Package) -> Result<()> {
         hash.update(&bytes[..count]);
     }
     ensure!(
-        hash.finish().as_ref() == hex::<32>(&package.sha256).context("Invalid package digest")?,
+        hash.finish().as_ref() == hex::<32>(sha256).context("Invalid package digest")?,
         "Update package digest changed"
     );
     Ok(())
@@ -438,6 +601,24 @@ pub(super) fn outside(root: &Path, path: &Path) -> bool {
 }
 
 pub(super) fn extract(archive: &Path, stage: &Path, entrypoint: &str) -> Result<()> {
+    extract_archive(archive, stage)?;
+    ensure!(
+        stage.join(entrypoint).is_file()
+            && stage.join("web/index.html").is_file()
+            && stage.join("runtime/tunnel/cloudflared.exe").is_file()
+            && stage.join("REVISION").is_file(),
+        "Update package is incomplete"
+    );
+    Ok(())
+}
+
+/// Delta archives carry only changed files; the full manifest is verified after
+/// they are assembled over the installed program directory.
+pub(super) fn extract_delta(archive: &Path, stage: &Path) -> Result<()> {
+    extract_archive(archive, stage)
+}
+
+fn extract_archive(archive: &Path, stage: &Path) -> Result<()> {
     fs::create_dir(stage)?;
     let mut archive = zip::ZipArchive::new(File::open(archive)?)?;
     ensure!(archive.len() <= 100_000, "Too many update entries");
@@ -482,12 +663,5 @@ pub(super) fn extract(archive: &Path, stage: &Path, entrypoint: &str) -> Result<
         ensure!(copied == size, "Update entry size mismatch");
         output.flush()?;
     }
-    ensure!(
-        stage.join(entrypoint).is_file()
-            && stage.join("web/index.html").is_file()
-            && stage.join("runtime/tunnel/cloudflared.exe").is_file()
-            && stage.join("REVISION").is_file(),
-        "Update package is incomplete"
-    );
     Ok(())
 }
