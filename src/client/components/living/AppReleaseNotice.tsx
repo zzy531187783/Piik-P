@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { ReleaseUpdateNotice } from "../../lib/release-update";
 import { renderReleaseNotes } from "../../lib/release-notes";
 import { ChannelSettingsDialog } from "../../channel/components/ChannelSettingsDialog";
@@ -23,6 +23,12 @@ const labels: Record<ReleaseUpdateNotice["kind"], CopyKey> = {
   "official-release": "client.update.official",
 };
 
+/** Only a same-major stable update is fetched automatically; a major change stays explicit. */
+export function shouldAutoDownload(update: ReleaseUpdateNotice, native?: AppUpdateControls): boolean {
+  return !!native && native.view.state === "idle" && !native.view.operationId &&
+    update.kind === "update-available" && !!update.revision;
+}
+
 export function AppReleaseNotice({ update, native, managementURL }: {
   update: ReleaseUpdateNotice; native?: AppUpdateControls; managementURL?: string;
 }) {
@@ -36,6 +42,19 @@ export function AppReleaseNotice({ update, native, managementURL }: {
   const automatic = native && native.view.state !== "unavailable";
   const active = automatic && native.view.operationId && native.view.state !== "idle";
   const canDownload = automatic && !active && update.revision && (update.kind === "update-available" || major);
+  const autoDownload = shouldAutoDownload(update, native);
+  useEffect(() => {
+    if (!autoDownload || !native) return;
+    // One automatic attempt per version; a failed download stays available as a manual retry.
+    const key = `piik.update.auto.${update.version}`;
+    try {
+      if (localStorage.getItem(key)) return;
+      localStorage.setItem(key, "1");
+    } catch {
+      return;
+    }
+    native.act({ action: "download", version: update.version, revision: update.revision! });
+  }, [autoDownload, native, update.version, update.revision]);
   return <><div className="lr-client-release">
     {major && <button id={warningId} className="lr-client-release-warning" type="button"
       onClick={() => setViewedRelease(update)} aria-haspopup="dialog" aria-label={t("client.update.majorHint")}>

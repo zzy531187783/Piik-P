@@ -6,7 +6,7 @@ import { createElement, useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppConnectionButton } from "../src/client/components/living/AppConnectionButton";
-import { AppReleaseNotice } from "../src/client/components/living/AppReleaseNotice";
+import { AppReleaseNotice, shouldAutoDownload } from "../src/client/components/living/AppReleaseNotice";
 import { CaptureSourcePicker } from "../src/client/components/living/CaptureSourcePicker";
 import { ChannelShareControl } from "../src/client/channel/components/ChannelShareControl";
 import { DEFAULT_QUALITY_SETTINGS } from "../src/shared/protocol";
@@ -46,6 +46,18 @@ describe("shared App connection entry", () => {
     }));
     expect(html).toContain('href="http://127.0.0.1:39721/client" target="_blank" rel="noopener noreferrer" aria-label="Update in App"');
     expect(html).not.toContain("?site=");
+  });
+
+  it("auto-downloads only a same-major update while the App updater is idle", () => {
+    const update = { kind: "update-available" as const, version: "v3.1.0", revision: "b".repeat(40),
+      url: "https://example.test/v3.1.0", releaseURL: "https://example.test/v3.1.0" };
+    const controls = (state: "idle" | "unavailable" | "downloading") => ({
+      view: { state } as never, busy: false, error: false, act() {},
+    });
+    expect(shouldAutoDownload(update, controls("idle"))).toBe(true);
+    expect(shouldAutoDownload({ ...update, kind: "major-update" }, controls("idle"))).toBe(false);
+    expect(shouldAutoDownload(update, controls("unavailable"))).toBe(false);
+    expect(shouldAutoDownload(update, controls("downloading"))).toBe(false);
   });
 
   it("keeps an unconnected owner discoverable even after App permission is verified", () => {

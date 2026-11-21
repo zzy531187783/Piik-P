@@ -11,11 +11,16 @@ export function useReleaseUpdate(identity?: AppReleaseIdentity, release?: Releas
   useEffect(() => {
     if (!version || !revision) return;
     let current = true;
-    void checkReleaseUpdate({ version, revision }, { packageTarget,
-      release: releaseVersion && releaseRevision ? { version: releaseVersion, revision: releaseRevision } : undefined }).then(notice => {
-      if (current) setResult({ key, notice });
-    }).catch(() => undefined);
-    return () => { current = false; };
+    const load = () => {
+      void checkReleaseUpdate({ version, revision }, { packageTarget,
+        release: releaseVersion && releaseRevision ? { version: releaseVersion, revision: releaseRevision } : undefined }).then(notice => {
+        if (current) setResult({ key, notice });
+      }).catch(() => undefined);
+    };
+    load();
+    // A long-lived App window re-checks without a reload; `refresh` stays available.
+    const timer = setInterval(load, 6 * 60 * 60 * 1000);
+    return () => { current = false; clearInterval(timer); };
   }, [version, revision, packageTarget, releaseVersion, releaseRevision, key, check]);
   return { update: result?.key === key ? result.notice : null,
     refresh: () => setCheck(value => value + 1) };
