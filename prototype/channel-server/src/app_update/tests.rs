@@ -33,7 +33,7 @@ fn signed_update_metadata_accepts_new_descriptive_fields() {
     let bytes = serde_json::to_vec(&serde_json::json!({
         "schema":1,"version":"v3.0.1","revision":SOURCE,"description":"A future publisher field",
         "targets":{"windows-amd64":{"artifact":"piik-app-windows-amd64.zip","size":1,
-            "sha256":"0".repeat(64),"label":"Windows App"}},
+            "sha256":"0".repeat(64),"files":manifest_json(),"label":"Windows App"}},
     }))
     .unwrap();
     let selection = Selection {
@@ -55,37 +55,54 @@ fn signed_update_metadata_accepts_new_descriptive_fields() {
     );
 }
 
+fn archive_contents() -> Vec<(&'static str, Vec<u8>)> {
+    vec![
+        ("piik-app.exe", b"test executable".to_vec()),
+        ("web/index.html", b"<html>test</html>".to_vec()),
+        ("runtime/tunnel/cloudflared.exe", b"test tunnel".to_vec()),
+        ("REVISION", SOURCE.as_bytes().to_vec()),
+        (
+            "web/padding.bin",
+            (0..160_000).map(|index| (index % 251) as u8).collect(),
+        ),
+    ]
+}
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn manifest() -> Vec<package::PackageFile> {
+    archive_contents()
+        .into_iter()
+        .map(|(path, bytes)| package::PackageFile {
+            path: path.to_owned(),
+            size: bytes.len() as u64,
+            sha256: hex(digest::digest(&digest::SHA256, &bytes).as_ref()),
+        })
+        .collect()
+}
+
+fn manifest_json() -> serde_json::Value {
+    serde_json::to_value(manifest()).unwrap()
+}
+
 fn archive() -> Vec<u8> {
     let mut archive = zip::ZipWriter::new(std::io::Cursor::new(vec![]));
-    for (path, content) in [
-        ("piik-app.exe", "test executable"),
-        ("web/index.html", "<html>test</html>"),
-        ("runtime/tunnel/cloudflared.exe", "test tunnel"),
-        ("REVISION", SOURCE),
-    ] {
+    for (path, content) in archive_contents() {
+        let method = if path == "web/padding.bin" {
+            zip::CompressionMethod::Stored
+        } else {
+            zip::CompressionMethod::Deflated
+        };
         archive
             .start_file(
                 path,
-                zip::write::SimpleFileOptions::default()
-                    .compression_method(zip::CompressionMethod::Deflated),
+                zip::write::SimpleFileOptions::default().compression_method(method),
             )
             .unwrap();
-        archive.write_all(content.as_bytes()).unwrap();
+        archive.write_all(&content).unwrap();
     }
-    archive
-        .start_file(
-            "web/padding.bin",
-            zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Stored),
-        )
-        .unwrap();
-    archive
-        .write_all(
-            &(0..160_000)
-                .map(|index| (index % 251) as u8)
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
     archive.finish().unwrap().into_inner()
 }
 
@@ -177,7 +194,8 @@ async fn fixture(delays: [Duration; 2], corrupt: [bool; 2]) -> Fixture {
         .map(|byte| format!("{byte:02x}"))
         .collect();
     let index = serde_json::to_vec(&serde_json::json!({"schema":1,"version":"v3.0.1","revision":SOURCE,
-        "targets":{"windows-amd64":{"artifact":"piik-app-windows-amd64.zip","size":body.len(),"sha256":hash}}})).unwrap();
+        "targets":{"windows-amd64":{"artifact":"piik-app-windows-amd64.zip","size":body.len(),"sha256":hash,
+            "files":manifest_json()}}})).unwrap();
     let signature = key.sign(&index).as_ref().to_vec();
     let providers = [0, 1].map(|index_number| Provider {
         index: index.clone(),
@@ -525,4 +543,68 @@ async fn unmanaged_directories_and_data_inside_the_bundle_stay_manual() {
         Owner::new(&fixture.config, closing).view().reason,
         Some("unmanaged-installation")
     );
+}
+
+fn signing_key() -> Ed25519KeyPair {
+    Ed25519KeyPair::from_pkcs8(
+        Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
+            .unwrap()
+            .as_ref(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn signed_manifest_must_cover_safe_packaged_files() {
+    let key = signing_key();
+    let selection = Selection {
+        version: "v3.0.1".into(),
+        revision: SOURCE.into(),
+    };
+    let public_key = key.public_key().as_ref().try_into().unwrap();
+    let verify = |target: serde_json::Value| {
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "schema":1,"version":"v3.0.1","revision":SOURCE,"targets":{"windows-amd64":target},
+        }))
+        .unwrap();
+        package::verify_index(
+            &public_key,
+            &bytes,
+            key.sign(&bytes).as_ref(),
+            &selection,
+            "windows-amd64",
+        )
+    };
+    assert!(verify(serde_json::json!({
+        "artifact":"piik-app-windows-amd64.zip","size":1,
+        "sha256":"0".repeat(64),"files":manifest_json()
+    }))
+    .is_ok());
+    assert!(verify(serde_json::json!({
+        "artifact":"piik-app-windows-amd64.zip","size":1,"sha256":"0".repeat(64)
+    }))
+    .is_err());
+    let mut unsafe_files = manifest_json();
+    unsafe_files[0]["path"] = serde_json::json!("../outside.txt");
+    assert!(verify(serde_json::json!({
+        "artifact":"piik-app-windows-amd64.zip","size":1,
+        "sha256":"0".repeat(64),"files":unsafe_files
+    }))
+    .is_err());
+}
+
+#[test]
+fn extracted_files_must_match_the_signed_manifest() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("package.zip");
+    fs::write(&path, archive()).unwrap();
+    let files = manifest();
+    let stage = directory.path().join("stage");
+    package::extract(&path, &stage, "piik-app.exe").unwrap();
+    package::verify_files(&stage, &files).unwrap();
+    fs::write(stage.join("web/index.html"), b"tampered").unwrap();
+    assert!(package::verify_files(&stage, &files).is_err());
+    fs::write(stage.join("web/index.html"), b"<html>test</html>").unwrap();
+    fs::write(stage.join("web/extra.txt"), b"extra").unwrap();
+    assert!(package::verify_files(&stage, &files).is_err());
 }

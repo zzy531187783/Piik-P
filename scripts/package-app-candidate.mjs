@@ -22,7 +22,7 @@ import { createZip, extractZip, tarExecutable } from "./archive-tool.mjs";
 import { assertBuildInputRetained, assertCleanRevision, resetBuildWorkspace } from "./build-workspace.mjs";
 import { buildVersion } from "./release-version.mjs";
 import { checkAppPackageStatic, checkAppPackageRuntime } from "./check-app-package.mjs";
-import { sha256 } from "./package-files.mjs";
+import { compareFileRecords, fileRecords, sha256 } from "./package-files.mjs";
 
 function fail(message) {
   throw new Error(message);
@@ -119,6 +119,8 @@ try {
     ...(values.web !== undefined ? ["--web", resolve(values.web)] : []),
   ];
   run(process.execPath, assembleArguments, repositoryRoot);
+  // The signed release index binds these exact records; the ZIP must reproduce them.
+  const files = fileRecords(packageRoot);
 
   mkdirSync(outputRoot, { recursive: false, mode: 0o700 });
   outputOwned = true;
@@ -128,6 +130,7 @@ try {
   const extractedRoot = join(temporaryRoot, "extracted");
   mkdirSync(extractedRoot);
   extractZip(archive, extractedRoot);
+  compareFileRecords(files, fileRecords(extractedRoot));
   await checkAppPackageStatic(extractedRoot, target, revision);
   await checkAppPackageRuntime(extractedRoot, target, version, revision, temporaryRoot, repositoryRoot);
   assertCleanRevision(repositoryRoot, revision);
@@ -135,7 +138,7 @@ try {
   writeFileSync(join(outputRoot, `${archiveName}.sha256`), `${digest}  ${archiveName}\n`, "ascii");
   writeFileSync(join(outputRoot, archiveName.replace(/\.zip$/, ".release.json")),
     `${JSON.stringify({ schema: 2, version, revision, target: target.id,
-      artifact: archiveName, artifactSha256: digest }, null, 2)}\n`);
+      artifact: archiveName, artifactSha256: digest, files }, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify({
     target: target.id,
     version,

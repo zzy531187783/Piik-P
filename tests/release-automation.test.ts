@@ -13,6 +13,8 @@ import { readReleaseArtifacts } from "../scripts/release-artifacts.mjs";
 const planner = fileURLToPath(new URL("../scripts/release-version.mjs", import.meta.url));
 const publisher = fileURLToPath(new URL("../scripts/publish-release.mjs", import.meta.url));
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
+const appFiles = ["piik-app.exe", "web/index.html", "runtime/tunnel/cloudflared.exe", "REVISION"]
+  .map(path => ({ path, size: 1, sha256: "0".repeat(64) }));
 
 describe("release automation", () => {
   it("accepts explicit prerelease builds without treating them as stable releases", () => {
@@ -281,7 +283,8 @@ describe("release automation", () => {
         const artifact = `${target}.${archive}`;
         writeFileSync(join(root, artifact), target);
         const descriptor = { schema: 2, version, revision, artifact, artifactSha256: sha(target),
-          target, ...(server ? { manifest: `${target}.manifest.tsv`, manifestSha256: sha("manifest") } : {}) };
+          target, ...(server ? { manifest: `${target}.manifest.tsv`, manifestSha256: sha("manifest") } : {}),
+          ...(target === "windows-amd64" ? { files: appFiles } : {}) };
         writeFileSync(join(root, `${target}.release.json`), JSON.stringify(descriptor));
         if (server) writeFileSync(join(root, `${target}.manifest.tsv`), "manifest");
         else writeFileSync(join(root, `${artifact}.sha256`), `${sha(target)}  ${artifact}\n`);

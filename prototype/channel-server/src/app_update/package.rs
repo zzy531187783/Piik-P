@@ -34,11 +34,21 @@ pub enum EntryKind {
     Directory,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct PackageFile {
+    pub path: String,
+    pub size: u64,
+    pub sha256: String,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 pub(super) struct Package {
     pub artifact: String,
     pub size: u64,
     pub sha256: String,
+    #[serde(default)]
+    pub files: Vec<PackageFile>,
 }
 
 #[derive(Deserialize)]
@@ -174,7 +184,115 @@ pub(super) fn verify_index(
             && package.sha256 == package.sha256.to_ascii_lowercase(),
         "Invalid signed App package"
     );
+    validate_package_files(&package)?;
     Ok(package)
+}
+
+/// The signed file manifest binds every extracted path to its exact bytes, so a
+/// package-level digest alone cannot hide a changed or unexpected entry.
+fn validate_package_files(package: &Package) -> Result<()> {
+    ensure!(
+        !package.files.is_empty(),
+        "Signed App package has no file manifest"
+    );
+    let mut paths = BTreeSet::new();
+    let mut total = 0u64;
+    for file in &package.files {
+        ensure!(
+            relative_path(&file.path)
+                && file.size > 0
+                && hex::<32>(&file.sha256).is_some()
+                && file.sha256 == file.sha256.to_ascii_lowercase()
+                && paths.insert(file.path.to_ascii_lowercase()),
+            "Invalid signed App file manifest"
+        );
+        total = total
+            .checked_add(file.size)
+            .context("App file manifest is too large")?;
+    }
+    ensure!(
+        total <= MAX_EXTRACTED_BYTES,
+        "App file manifest is too large"
+    );
+    for required in [
+        "piik-app.exe",
+        "web/index.html",
+        "runtime/tunnel/cloudflared.exe",
+        "REVISION",
+    ] {
+        ensure!(
+            paths.contains(&required.to_ascii_lowercase()),
+            "App file manifest is incomplete"
+        );
+    }
+    Ok(())
+}
+
+/// Verify every extracted file against the signed manifest. Extra files are as
+/// fatal as changed ones: the installed directory must be exactly the release.
+pub(super) fn verify_files(root: &Path, files: &[PackageFile]) -> Result<()> {
+    fn walk(
+        root: &Path,
+        directory: &Path,
+        expected: &BTreeMap<String, &PackageFile>,
+        found: &mut BTreeSet<String>,
+    ) -> Result<()> {
+        for entry in fs::read_dir(directory)? {
+            let path = entry?.path();
+            let kind = entry_kind(&fs::symlink_metadata(&path)?)?;
+            let relative = path
+                .strip_prefix(root)?
+                .components()
+                .map(|component| {
+                    component
+                        .as_os_str()
+                        .to_str()
+                        .context("Non-Unicode App path")
+                })
+                .collect::<Result<Vec<_>>>()?
+                .join("/");
+            if kind == EntryKind::Directory {
+                walk(root, &path, expected, found)?;
+                continue;
+            }
+            let key = relative.to_ascii_lowercase();
+            let file = expected
+                .get(&key)
+                .with_context(|| format!("Unexpected App file: {relative}"))?;
+            ensure!(found.insert(key), "Duplicate App file: {relative}");
+            ensure!(
+                fs::metadata(&path)?.len() == file.size,
+                "App file size changed: {relative}"
+            );
+            let mut source = File::open(&path)?;
+            let mut hash = digest::Context::new(&digest::SHA256);
+            let mut buffer = [0u8; 64 * 1024];
+            loop {
+                let count = source.read(&mut buffer)?;
+                if count == 0 {
+                    break;
+                }
+                hash.update(&buffer[..count]);
+            }
+            ensure!(
+                hash.finish().as_ref()
+                    == hex::<32>(&file.sha256).context("Invalid App file digest")?,
+                "App file digest changed: {relative}"
+            );
+        }
+        Ok(())
+    }
+    let mut expected = BTreeMap::new();
+    for file in files {
+        expected.insert(file.path.to_ascii_lowercase(), file);
+    }
+    let mut found = BTreeSet::new();
+    walk(root, root, &expected, &mut found)?;
+    ensure!(
+        found.len() == expected.len(),
+        "App file manifest is incomplete"
+    );
+    Ok(())
 }
 
 pub(super) fn verify_archive(path: &Path, package: &Package) -> Result<()> {

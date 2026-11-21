@@ -8,7 +8,37 @@ import { SERVER_PACKAGE_TARGETS } from "./server-package-targets.mjs";
 export function updateIndex(release) {
   return { schema: 1, version: release.version, revision: release.revision,
     targets: Object.fromEntries([...release.packagesByTarget].sort(([a], [b]) => a.localeCompare(b)).map(([target, asset]) =>
-      [target, { artifact: asset.name, size: asset.size, sha256: asset.sha256 }])) };
+      [target, { artifact: asset.name, size: asset.size, sha256: asset.sha256,
+        ...(asset.files ? { files: asset.files } : {}) }])) };
+}
+
+// The App publishes one signed file manifest so an update can bind every
+// installed path to exact bytes; Server packages keep their own manifest.
+function appFileManifest(descriptor, name) {
+  const files = descriptor.files;
+  if (!Array.isArray(files) || files.length === 0) {
+    throw new Error(`App release file manifest is missing: ${name}`);
+  }
+  const seen = new Set();
+  let total = 0;
+  for (const file of files) {
+    if (!file || typeof file.path !== "string" || typeof file.size !== "number" ||
+        !Number.isSafeInteger(file.size) || file.size <= 0 ||
+        typeof file.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(file.sha256) ||
+        file.path.length === 0 || file.path.startsWith("/") || file.path.includes("\\") ||
+        file.path.split("/").some(part => part === "" || part === "." || part === "..")) {
+      throw new Error(`App release file manifest is invalid: ${name}`);
+    }
+    const key = file.path.toLowerCase();
+    if (seen.has(key)) throw new Error(`Duplicate App release file: ${name}`);
+    seen.add(key);
+    total += file.size;
+  }
+  if (total > 4 * 1024 * 1024 * 1024) throw new Error(`App release file manifest is too large: ${name}`);
+  for (const required of ["piik-app.exe", "web/index.html", "runtime/tunnel/cloudflared.exe", "REVISION"]) {
+    if (!seen.has(required.toLowerCase())) throw new Error(`App release file manifest is incomplete: ${name}`);
+  }
+  return files.map(file => ({ path: file.path, size: file.size, sha256: file.sha256 }));
 }
 
 export function readUpdateArtifacts(release, directory, publicKey = process.env.PIIK_UPDATE_PUBLIC_KEY) {
@@ -113,8 +143,6 @@ export function readReleaseArtifacts(directory, version, revision, { publicKey =
     if (archive.sha256 !== descriptor.artifactSha256) {
       throw new Error(`Release artifact checksum mismatch: ${name}`);
     }
-    packages.push(archive);
-    packagesByTarget.set(target, archive);
     const serverTarget = SERVER_PACKAGE_TARGETS.find(candidate => candidate.id === target);
     if (serverTarget) {
       if (asset(descriptor.manifest).sha256 !== descriptor.manifestSha256) {
@@ -124,7 +152,13 @@ export function readReleaseArtifacts(directory, version, revision, { publicKey =
     } else if (readFileSync(asset(`${descriptor.artifact}.sha256`).path, "utf8").trim() !==
         `${descriptor.artifactSha256}  ${descriptor.artifact}`) {
       throw new Error(`App checksum file mismatch: ${target}`);
+    } else if (descriptor.files !== undefined || target === "windows-amd64") {
+      // The Windows App is the only updatable target; other App packages keep
+      // their own descriptors until they gain an updater.
+      archive.files = appFileManifest(descriptor, name);
     }
+    packages.push(archive);
+    packagesByTarget.set(target, archive);
   }
   const expected = [...SERVER_PACKAGE_TARGETS, ...APP_PACKAGE_TARGETS, ANDROID_APP_PACKAGE_TARGET].map(target => target.id);
   if (targets.size !== expected.length || expected.some((target) => !targets.has(target))) {

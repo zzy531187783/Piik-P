@@ -368,6 +368,7 @@ pub(super) fn run(path: PathBuf) -> Result<()> {
             &workspace.join("incoming"),
             &plan.layout.entrypoint,
         )?;
+        package::verify_files(&workspace.join("incoming"), &package.files)?;
         ensure!(
             fs::read_to_string(workspace.join("incoming/REVISION"))?.trim()
                 == plan.selection.revision,

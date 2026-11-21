@@ -15,6 +15,8 @@ const keys = generateKeyPairSync("ed25519");
 const pem = keys.privateKey.export({ format: "pem", type: "pkcs8" }).toString();
 const publicHex = Buffer.from(keys.publicKey.export({ format: "jwk" }).x!, "base64url").toString("hex");
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
+const appFiles = ["piik-app.exe", "web/index.html", "runtime/tunnel/cloudflared.exe", "REVISION"]
+  .map(path => ({ path, size: 1, sha256: "0".repeat(64) }));
 let root: string;
 
 beforeEach(() => {
@@ -26,6 +28,7 @@ beforeEach(() => {
     writeFileSync(join(root, `${target.id}.release.json`), JSON.stringify({
       schema: 2, version, revision, target: target.id, artifact, artifactSha256: sha(target.id),
       ...(server ? { manifest: `${target.id}.manifest.tsv`, manifestSha256: sha("manifest") } : {}),
+      ...(target.id === "windows-amd64" ? { files: appFiles } : {}),
     }));
     if (server) writeFileSync(join(root, `${target.id}.manifest.tsv`), "manifest");
     else writeFileSync(join(root, `${artifact}.sha256`), `${sha(target.id)}  ${artifact}\n`);
@@ -93,7 +96,8 @@ describe("signed update index", () => {
     const release = readReleaseArtifacts(root, version, revision);
     expect(index).toEqual({ schema: 1, version, revision, targets: Object.fromEntries(
       [...release.packagesByTarget].map(([target, asset]) => [target,
-        { artifact: asset.name, size: asset.size, sha256: asset.sha256 }]),
+        { artifact: asset.name, size: asset.size, sha256: asset.sha256,
+          ...(asset.files ? { files: asset.files } : {}) }]),
     ) });
     expect(Object.keys(index.targets)).toEqual([...release.targets].sort());
     expect(release.files).toHaveLength(9);

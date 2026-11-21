@@ -18,6 +18,8 @@ const hash = (value: string | Buffer) => createHash("sha256").update(value).dige
 const keys = generateKeyPairSync("ed25519");
 const publicHex = Buffer.from(keys.publicKey.export({ format: "jwk" }).x!, "base64url").toString("hex");
 const pem = keys.privateKey.export({ format: "pem", type: "pkcs8" }).toString();
+const appFiles = ["piik-app.exe", "web/index.html", "runtime/tunnel/cloudflared.exe", "REVISION"]
+  .map(path => ({ path, size: 1, sha256: "0".repeat(64) }));
 for (const target of ["server", "server-linux-arm64", "server-windows-amd64", "windows-amd64", "linux-amd64", "linux-arm64", "darwin-arm64", "darwin-amd64", "android-universal"]) {
   const server = target.startsWith("server");
   // The Windows Server package ships a ZIP; the Linux Server packages keep tar.gz.
@@ -27,6 +29,7 @@ for (const target of ["server", "server-linux-arm64", "server-windows-amd64", "w
   writeFileSync(join(directory, `${target}.release.json`), JSON.stringify({
     schema: 2, version, revision, artifact, artifactSha256: hash(target),
     target, ...(server ? { manifest: `${target}.manifest.tsv`, manifestSha256: hash("manifest") } : {}),
+    ...(target === "windows-amd64" ? { files: appFiles } : {}),
   }));
   if (server) writeFileSync(join(directory, `${target}.manifest.tsv`), "manifest");
   else writeFileSync(join(directory, `${artifact}.sha256`), `${hash(target)}  ${artifact}\n`);
