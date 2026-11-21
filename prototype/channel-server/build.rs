@@ -1,6 +1,9 @@
 fn main() {
     println!("cargo:rerun-if-env-changed=PIIK_BUILD_VERSION");
     println!("cargo:rerun-if-env-changed=PIIK_BUILD_REVISION");
+    println!("cargo:rerun-if-env-changed=PIIK_BUILD_TARGET");
+    println!("cargo:rerun-if-env-changed=PIIK_APP_BUNDLE_LAYOUT");
+    println!("cargo:rerun-if-env-changed=PIIK_UPDATE_PUBLIC_KEY");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
         && std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() == Ok("x86_64")
         && std::env::var_os("CARGO_FEATURE_CAPTURE").is_some()
