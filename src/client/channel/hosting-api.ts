@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { roomSchema, roomSummarySchema, type RoomSummary } from "./protocol";
+import { channelPath } from "./base-path";
 
 const descriptionSchema = z.object({ sessionId: z.uuid(), roomIds: z.array(roomSchema.shape.id) });
 export type NativeHostingDescription = z.infer<typeof descriptionSchema>;
@@ -32,11 +33,11 @@ export class NativeDomainHosting {
   constructor(private readonly authorization: HeadersInit) {}
 
   async snapshot(): Promise<Blob> {
-    return (await hostingRequest("/prototype/channel/backup", this.authorization)).blob();
+    return (await hostingRequest(channelPath("/prototype/channel/backup"), this.authorization)).blob();
   }
 
   async restore(archive: Blob): Promise<string> {
-    const value: unknown = await (await hostingRequest("/prototype/channel/backup", this.authorization, archive)).json();
+    const value: unknown = await (await hostingRequest(channelPath("/prototype/channel/backup"), this.authorization, archive)).json();
     return z.object({ domainId: z.uuid() }).parse(value).domainId;
   }
 }

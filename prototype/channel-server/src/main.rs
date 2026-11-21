@@ -113,6 +113,25 @@ async fn main() -> anyhow::Result<std::process::ExitCode> {
         })
         .collect();
     let udp = ServerUdp::bind(&bindings)?;
+    let domain_specs = domain_specifications()?;
+    if !domain_specs.is_empty() || directory.join("domains.json").is_file() {
+        let domains = piik_channel_prototype::open_domains(
+            &directory,
+            &domain_specs,
+            origin.clone(),
+            invitation_origin,
+            ice_servers,
+            room_creation_policy,
+            hosting_mode,
+        )?;
+        println!("Piik Server: http://{bound}");
+        for domain in &domains {
+            println!("Domain: http://{bound}/d/{}/", domain.domain.directory().0);
+        }
+        release::startup_notice();
+        piik_channel_prototype::serve_domains(listener, domains, frontend.join("index.html"), routes, udp, stop).await?;
+        return Ok(std::process::ExitCode::SUCCESS);
+    }
     let state = Domain::open_with_options(
         &directory,
         &owner,
@@ -127,4 +146,22 @@ async fn main() -> anyhow::Result<std::process::ExitCode> {
     release::startup_notice();
     serve_server(listener, state, directory, routes, udp, stop).await?;
     Ok(std::process::ExitCode::SUCCESS)
+}
+
+/// `PIIK_CHANNEL_DOMAINS` is a comma-separated `name=seed` list. A seed is only
+/// needed the first time its domain directory is created.
+fn domain_specifications() -> anyhow::Result<Vec<(String, String)>> {
+    let Ok(value) = std::env::var("PIIK_CHANNEL_DOMAINS") else {
+        return Ok(Vec::new());
+    };
+    let mut specifications = Vec::new();
+    for entry in value.split(',').map(str::trim).filter(|entry| !entry.is_empty()) {
+        let (name, seed) = entry.split_once('=').unwrap_or((entry, ""));
+        anyhow::ensure!(
+            !name.trim().is_empty(),
+            "PIIK_CHANNEL_DOMAINS entries need a name"
+        );
+        specifications.push((name.trim().to_owned(), seed.trim().to_owned()));
+    }
+    Ok(specifications)
 }

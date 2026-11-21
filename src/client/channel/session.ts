@@ -38,6 +38,7 @@ import { captureBrowserSource, setMediaPaused, type BrowserCaptureSource } from 
 import { loadCameraPreviews, type CameraPreview } from "../media/camera-previews";
 import { readBackup, writeBackup, type BackupMetadata, type RetainedBackupFile } from "./backup-archive";
 import { NativeDomainHosting, NativeRoomHosting } from "./hosting-api";
+import { channelPath } from "./base-path";
 import type { RetainedFile } from "./file-store";
 import { automaticVideoCodecPreference, manualVideoCodecPreference, supportsH264Receive, type BrowserVideoCodecMode, type BrowserVideoCodecPreference } from "../webrtc/video-codec";
 import { preferredVideoCodecForTrack } from "../webrtc/video-codec-preflight";
@@ -433,7 +434,7 @@ export class ChannelSession {
         pairs: state.pairs.map(({ id, peerId, rooms, incoming, outgoing }) => ({ pairId: id, peerId, rooms, incoming, outgoing })),
       });
     });
-    const url = new URL("/prototype/channel", location.href);
+    const url = new URL(channelPath("/prototype/channel"), location.href);
     url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
     const socket = new WebSocket(url);
     const decoder = new ChannelEventDecoder();
@@ -1571,7 +1572,7 @@ export class ChannelSession {
       }
     }
     if (state.channel.ownerId === self.id && this.credential) {
-      const native = new NativeRoomHosting("/prototype/channel/rooms", { Authorization: `Bearer ${this.credential}` }, "/prototype/channel/hosting");
+      const native = new NativeRoomHosting(channelPath("/prototype/channel/rooms"), { Authorization: `Bearer ${this.credential}` }, channelPath("/prototype/channel/hosting"));
       const description = await native.describe().catch(() => undefined); current();
       if (description && description.sessionId === delivery.hostSessionId && description.roomIds.includes(roomId)) {
         return { current, native: { snapshot: () => native.snapshot(roomId), restore: (blob: Blob) => native.restore(blob) } };
@@ -1676,7 +1677,7 @@ export class ChannelSession {
     if (metadata.policy.creatorId === this.view.self?.id) return;
     const check = this.sessionContext(), archived = metadata.ownCredential;
     if (!archived || archived.userId !== metadata.policy.creatorId) throw new Error("backup_identity_required");
-    const response = await fetch("/prototype/channel/identity", { headers: { Authorization: `Bearer ${archived.credential}` }, cache: "no-store" });
+    const response = await fetch(channelPath("/prototype/channel/identity"), { headers: { Authorization: `Bearer ${archived.credential}` }, cache: "no-store" });
     if (!response.ok) throw new Error("backup_identity_required");
     const identity = z.object({ domainId: z.string(), user: userSchema }).parse(await response.json()); check();
     if (identity.domainId !== metadata.domainId || identity.user.id !== archived.userId) throw new Error("backup_identity_required");

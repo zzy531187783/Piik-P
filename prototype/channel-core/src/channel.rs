@@ -68,6 +68,18 @@ impl Channel {
         (self.id, self.identity.owner_id)
     }
 
+    /// Public directory facts for a server's domain list; never admission secrets.
+    pub fn directory(&self) -> (Uuid, String, IdentityIcon) {
+        (self.id, self.name.clone(), self.icon.clone())
+    }
+
+    /// Operator bootstrap path for a new domain; runtime renames use UpdateDomain.
+    pub(crate) fn set_directory_name(&mut self, name: &str) -> Result<(), &'static str> {
+        let name = title(name).ok_or("invalid_domain_name")?;
+        self.name = name;
+        Ok(())
+    }
+
     pub fn new(owner_key: String, ice_servers: Vec<Value>) -> Self {
         let identity = Identity::new(owner_key);
         Self {

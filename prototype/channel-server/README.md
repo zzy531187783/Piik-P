@@ -87,6 +87,15 @@ The selected mode belongs to the saved channel and survives restarts.
 Restore a hosted channel backup on a standalone Server. App starts and restores
 lightweight channels.
 
+`PIIK_CHANNEL_DOMAINS` hosts several domains on one Server. Its value is a
+comma-separated `name=seed` list; a seed is used only the first time that
+domain's directory is created. Domains live under `data/domains/<slug>/` and
+`data/domains.json` records their names and IDs, so later starts can omit the
+environment value. Each domain keeps its own rooms, members and owner key and
+serves its page at `/d/<domain-id>/`; the root lists the domains. This mode
+does not use `PIIK_CHANNEL_OWNER_KEY`. Repeating an existing name keeps its
+domain; add a new `name=seed` entry to create another one.
+
 The first startup creates Living room, Studio and Quiet corner under the Server's
 Native endpoint. Enter one of those rooms and share/watch normally to use its
 server media path. The channel's mode assigns the host for rooms created in the

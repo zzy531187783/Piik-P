@@ -197,6 +197,16 @@ impl Authority {
         self.channel.identity()
     }
 
+    /// Public directory facts for a server's domain list; never admission secrets.
+    pub fn directory(&self) -> (Uuid, String, wire::IdentityIcon) {
+        self.channel.directory()
+    }
+
+    /// Operator bootstrap path for a new domain; runtime renames use UpdateDomain.
+    pub fn set_directory_name(&mut self, name: &str) -> Result<(), &'static str> {
+        self.channel.set_directory_name(name)
+    }
+
     /// The embedding Server passes its Native's actual Welcome, never a later socket lookup.
     pub fn set_service_endpoint(
         &mut self,

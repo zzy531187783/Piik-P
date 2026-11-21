@@ -16,7 +16,7 @@ use futures_util::{stream::FuturesUnordered, FutureExt, Sink, SinkExt, StreamExt
 use piik_channel_core::{
     backup::DomainMetadata,
     storage,
-    wire::{Event, HostingMode, Request, RoomCreationPolicy},
+    wire::{Event, HostingMode, IdentityIcon, Request, RoomCreationPolicy},
     Authority, Effects,
 };
 use std::{
@@ -768,6 +768,55 @@ impl Domain {
             .to_owned()
     }
 
+    /// Domain routes under one URL prefix; the server composition merges these
+    /// into its single listener and owns static assets separately.
+    pub fn router(&self, prefix: &str) -> Router {
+        let route = |suffix: &str| format!("{prefix}{suffix}");
+        Router::new()
+            .route(&route("/prototype/channel"), get(upgrade))
+            .route(&route("/prototype/channel/identity"), get(identify))
+            .route(
+                &route("/prototype/channel/backup"),
+                get(backup::export_domain).put(backup::restore_domain),
+            )
+            .route(
+                &route("/prototype/channel/rooms/{room}/backup"),
+                get(backup::export),
+            )
+            .route(&route("/prototype/channel/rooms/backup"), put(backup::restore))
+            .route(&route("/prototype/channel/hosting"), get(backup::describe))
+            .route(
+                &route("/prototype/channel/limits"),
+                get(|| async { axum::Json(piik_channel_core::ATTACHMENT_LIMITS) }),
+            )
+            .with_state(self.clone())
+    }
+
+    pub fn expire(&self) {
+        self.hub.lock().unwrap().expire();
+    }
+
+    pub fn directory(&self) -> (Uuid, String, IdentityIcon) {
+        self.hub.lock().unwrap().authority.directory()
+    }
+
+    /// Name a freshly created domain from its Server configuration; later renames
+    /// stay with the owner's UpdateDomain command.
+    pub fn set_bootstrap_name(&self, name: &str) -> anyhow::Result<()> {
+        let mut hub = self.hub.lock().unwrap();
+        let before = hub.authority.clone();
+        hub.authority
+            .set_directory_name(name)
+            .map_err(anyhow::Error::msg)?;
+        let checkpoint = serde_json::to_value(hub.authority.export_backup())?;
+        let saved = hub.storage.lock().unwrap().save(&checkpoint);
+        if let Err(error) = saved {
+            hub.authority = before;
+            return Err(anyhow::Error::from_boxed(error));
+        }
+        Ok(())
+    }
+
     pub async fn serve(
         self,
         listener: tokio::net::TcpListener,
@@ -787,23 +836,7 @@ impl Domain {
     ) -> anyhow::Result<()> {
         let app = Router::new()
             .route("/healthz", get(|| async { "piik-channel-prototype" }))
-            .route("/prototype/channel", get(upgrade))
-            .route("/prototype/channel/identity", get(identify))
-            .route(
-                "/prototype/channel/backup",
-                get(backup::export_domain).put(backup::restore_domain),
-            )
-            .route(
-                "/prototype/channel/rooms/{room}/backup",
-                get(backup::export),
-            )
-            .route("/prototype/channel/rooms/backup", put(backup::restore))
-            .route("/prototype/channel/hosting", get(backup::describe))
-            .route(
-                "/prototype/channel/limits",
-                get(|| async { axum::Json(piik_channel_core::ATTACHMENT_LIMITS) }),
-            )
-            .with_state(self.clone())
+            .merge(self.router(""))
             .merge(routes);
         let (stop_http, mut http_stopped) = watch::channel(false);
         let http = crate::web::serve_http(listener, app.clone(), async move {
@@ -844,7 +877,7 @@ impl Domain {
         Ok(result?)
     }
 
-    fn close_clients(&self) {
+    pub(crate) fn close_clients(&self) {
         let hub = self.hub.lock().unwrap();
         self.closing.send_replace(true);
         for client in hub.clients.values() {
