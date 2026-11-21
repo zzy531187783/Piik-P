@@ -79,6 +79,19 @@ extern "system" {
     fn MessageBoxW(owner: isize, text: *const u16, caption: *const u16, flags: u32) -> i32;
 }
 
+#[link(name = "kernel32")]
+extern "system" {
+    fn CreateEventW(
+        attributes: *const std::ffi::c_void,
+        manual_reset: i32,
+        initial_state: i32,
+        name: *const u16,
+    ) -> isize;
+    fn SetEvent(handle: isize) -> i32;
+    fn WaitForSingleObject(handle: isize, milliseconds: u32) -> u32;
+    fn CloseHandle(handle: isize) -> i32;
+}
+
 #[derive(Clone, Copy, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum Language {
@@ -158,6 +171,7 @@ enum ServiceEvent {
     },
     Navigate(String),
     ContentLoading,
+    Activate,
     Finished,
     PopupClosed(WindowId),
     PopupPresentation(WindowId, popup::Message),
@@ -480,10 +494,40 @@ fn message_box(owner: isize, text: &str, flags: u32) -> i32 {
     unsafe { MessageBoxW(owner, text.as_ptr(), caption.as_ptr(), flags) }
 }
 
+/// Ask the user to install this package for the current Windows account.
+pub(crate) fn confirm(text: &str) -> bool {
+    // MB_YESNO | MB_ICONINFORMATION; IDYES = 6.
+    message_box(0, text, 0x04 | 0x40) == 6
+}
+
 pub fn report_error(detail: &str) {
     if !console::attached() {
         message_box(0, detail, 0x10);
     }
+}
+
+/// One App window owns the session. A later launch signals this named event and
+/// exits; the waiting thread asks the running window to come forward.
+fn claim_activation() -> Result<Option<isize>> {
+    let name: Vec<u16> = "Local\\Piik-App-Activate"
+        .encode_utf16()
+        .chain(Some(0))
+        .collect();
+    let handle = unsafe { CreateEventW(std::ptr::null(), 0, 0, name.as_ptr()) };
+    if handle == 0 {
+        return Err(anyhow::anyhow!(
+            "CreateEventW failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    if std::io::Error::last_os_error().raw_os_error() == Some(183) {
+        unsafe {
+            SetEvent(handle);
+            CloseHandle(handle);
+        }
+        return Ok(None);
+    }
+    Ok(Some(handle))
 }
 
 pub fn run(mut config: Config, port: Option<u16>) -> Result<()> {
@@ -491,6 +535,17 @@ pub fn run(mut config: Config, port: Option<u16>) -> Result<()> {
     let controls: WindowControls =
         serde_json::from_str(CONTROLS).context("Read window controls")?;
     let mut events = EventLoopBuilder::<ServiceEvent>::with_user_event().build();
+    let Some(activation) = claim_activation()? else {
+        return Ok(());
+    };
+    let activation_events = events.create_proxy();
+    thread::spawn(move || {
+        unsafe {
+            WaitForSingleObject(activation, u32::MAX);
+            CloseHandle(activation);
+        }
+        let _ = activation_events.send_event(ServiceEvent::Activate);
+    });
     let pending: PendingPermissions = Rc::default();
     let popups: Popups = Rc::default();
     let mut context = WebContext::new(Some(config.data_root.join("webview")));
@@ -785,6 +840,13 @@ pub fn run(mut config: Config, port: Option<u16>) -> Result<()> {
                     popups
                         .borrow_mut()
                         .retain(|child| child.window.id() != window_id);
+                }
+            }
+            Event::UserEvent(ServiceEvent::Activate) => {
+                if let Some(main) = &window {
+                    main.window.set_minimized(false);
+                    main.window.set_visible(true);
+                    main.window.set_focus();
                 }
             }
             Event::UserEvent(ServiceEvent::Finished) => {

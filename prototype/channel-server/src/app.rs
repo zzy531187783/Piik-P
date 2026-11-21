@@ -64,6 +64,11 @@ use tokio::{
 use tower_http::services::ServeDir;
 use uuid::Uuid;
 
+/// The per-user application data directory shared by every App launch mode.
+pub fn default_data_directory() -> Option<PathBuf> {
+    dirs::data_local_dir().map(|directory| directory.join("Piik").join("channel-app"))
+}
+
 const IO_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_REQUEST_BYTES: usize = 256 * 1024;
 const SERVICE: &str = "piik-channel-app";

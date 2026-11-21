@@ -12,6 +12,15 @@ fn main() -> Result<()> {
     if piik_channel_native::capture::worker_entry()? {
         return Ok(());
     }
+    #[cfg(target_os = "windows")]
+    match piik_channel_prototype::app_install::entry() {
+        Ok(true) => return Ok(()),
+        Ok(false) => {}
+        Err(error) => {
+            piik_channel_prototype::app_windows::report_error(&format!("{error:#}"));
+            return Err(error);
+        }
+    }
     let result = app_main();
     #[cfg(target_os = "windows")]
     if let Err(error) = &result {
@@ -76,10 +85,8 @@ fn configuration() -> Result<(Config, Option<u16>)> {
     let config = Config {
         data_root: match env::var_os("PIIK_CHANNEL_APP_DATA_DIR") {
             Some(directory) => PathBuf::from(directory),
-            None => dirs::data_local_dir()
-                .context("No local application data directory")?
-                .join("Piik")
-                .join("channel-app"),
+            None => piik_channel_prototype::app::default_data_directory()
+                .context("No local application data directory")?,
         },
         assets: env::var_os("PIIK_CHANNEL_APP_WEB_DIR")
             .map(PathBuf::from)
