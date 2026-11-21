@@ -335,7 +335,7 @@ impl MainWindow {
                 .with_title("Piik")
                 .with_decorations(false)
                 .with_undecorated_shadow(true)
-                .with_inner_size(LogicalSize::new(1120.0, 760.0))
+                .with_inner_size(LogicalSize::new(1280.0, 820.0))
                 .with_visible(false)
                 .build(target)?,
         );

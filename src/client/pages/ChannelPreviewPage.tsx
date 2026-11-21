@@ -104,7 +104,7 @@ export function ChannelRoomPage({ channel, selected, onSelect, appControl, layou
   const canCreateRoom = creationPolicy !== "owner_only";
   const [sharingView, setSharingView] = useState(() => readRoomPreferences().sharingView);
   const [workspaceElement, workspaceWidth] = useElementWidth();
-  const sidebarsInline = layout !== "quick" && workspaceWidth > 1080;
+  const sidebarsInline = layout !== "quick" && workspaceWidth > 900;
   const [companionOpen, setCompanionOpen] = useState({ people: true, chat: false });
   const [managedRoomId, setManagedRoomId] = useState<string | null>(null);
   const [newRoomName, setNewRoomName] = useState<string | null>(null);

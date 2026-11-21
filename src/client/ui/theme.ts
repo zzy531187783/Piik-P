@@ -7,10 +7,8 @@ export const THEME_STORAGE_KEY = "piik:ui-theme";
 const DARK_THEME_QUERY = "(prefers-color-scheme: dark)";
 
 function detectTheme(): Theme {
-  return typeof window !== "undefined" &&
-    window.matchMedia?.(DARK_THEME_QUERY).matches
-    ? "dark"
-    : "light";
+  // Piik's channel workspace ships dark by default, matching the App shell.
+  return "dark";
 }
 
 function readInitial(): Theme {
