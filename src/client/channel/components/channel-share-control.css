@@ -38,6 +38,21 @@
   border-radius: inherit;
 }
 .c3-share-picker .lr-source-picker-panel { height: auto; }
+.c3-share-picker.has-share-start { max-height: min(720px, calc(100dvh - 16px)); }
+.c3-share-start { display: grid; gap: 10px; min-width: 0; }
+.c3-share-start-options { display: grid; gap: 6px; min-width: 0; }
+.c3-share-start-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.c3-share-start-label { flex: none; color: var(--muted); font-size: 12px; font-weight: 650; }
+.c3-share-start-summary {
+  margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+.c3-share-start-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.c3-share-start-choice {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  overflow: hidden; color: var(--muted); font-size: 12px;
+}
+.c3-share-start-choice > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .c3-share-title { margin: 14px 18px 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); font-size: 12px; }
 .c3-share-title summary { cursor: pointer; font-weight: 650; padding-block: 6px; }

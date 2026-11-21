@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 import type { NativeCaptureTarget } from "../../native/wire";
 import { audioApplicationKey, audioApplications, nativeCaptureTargetKey } from "../../native/capture-selection";
@@ -67,6 +67,10 @@ export function CaptureSourcePicker({
   initialExcludeAudio,
   audioLocked = false,
   selectionDisabled = false,
+  selectedTargetKey,
+  browserSelected = false,
+  onOptionsChange,
+  footer,
 }: {
   nativeSources: NativeSourceList;
   onBrowser: () => void;
@@ -91,6 +95,11 @@ export function CaptureSourcePicker({
   initialExcludeAudio?: NativeCaptureTarget;
   audioLocked?: boolean;
   selectionDisabled?: boolean;
+  /** Highlights the chosen source while the caller waits for one confirmation. */
+  selectedTargetKey?: string;
+  browserSelected?: boolean;
+  onOptionsChange?: (options: { audio: boolean; border: boolean; excludeAudio?: NativeCaptureTarget }) => void;
+  footer?: ReactNode;
 }) {
   const { t } = useCopy();
   const pickerId = useId();
@@ -100,6 +109,13 @@ export function CaptureSourcePicker({
   const [shareAudio, setShareAudio] = useState(initialAudio);
   const [showCaptureBorder, setShowCaptureBorder] = useState(initialShowCaptureBorder);
   const [excludeAudio, setExcludeAudio] = useState(initialExcludeAudio);
+  const emitOptions = useCallback((next: { audio?: boolean; border?: boolean; excludeAudio?: NativeCaptureTarget }) => {
+    onOptionsChange?.({
+      audio: next.audio ?? shareAudio,
+      border: next.border ?? showCaptureBorder,
+      excludeAudio: "excludeAudio" in next ? next.excludeAudio : excludeAudio,
+    });
+  }, [onOptionsChange, shareAudio, showCaptureBorder, excludeAudio]);
   const appDetected = nativeAppDetected(nativeSources);
   // Retained targets classify tabs during refresh; only ready targets are selectable.
   const pickerOnly = (nativeSources.kind === "ready" || nativeSources.kind === "loading") && !!nativeSources.sources?.length &&
@@ -194,7 +210,7 @@ export function CaptureSourcePicker({
       aria-checked={shareAudio && anyNativeAudio}
       aria-label={audioLabel}
       disabled={audioLocked || !anyNativeAudio}
-      onClick={() => setShareAudio((current) => !current)}
+      onClick={() => { const next = !shareAudio; setShareAudio(next); emitOptions({ audio: next }); }}
     />
   );
 
@@ -302,7 +318,11 @@ export function CaptureSourcePicker({
                       aria-checked={showCaptureBorder}
                       aria-label={t("host.sourcePicker.showCaptureBorder")}
                       aria-description={t("host.sourcePicker.showCaptureBorderHint")}
-                      onClick={() => setShowCaptureBorder((current) => !current)}
+                      onClick={() => {
+                        const next = !showCaptureBorder;
+                        setShowCaptureBorder(next);
+                        emitOptions({ border: next });
+                      }}
                     />
                   </Tooltip>
                 </div>
@@ -334,7 +354,10 @@ export function CaptureSourcePicker({
                     <Glyph name="chevron" size={14} />
                   </summary>
                   <AudioExclusionSelect sources={applications} value={excludeAudio}
-                    showLabel={false} disabled={selectionDisabled} onChange={setExcludeAudio} />
+                    showLabel={false} disabled={selectionDisabled} onChange={value => {
+                      setExcludeAudio(value);
+                      emitOptions({ excludeAudio: value });
+                    }} />
                 </details>
               ) : null}
             </div>
@@ -351,6 +374,7 @@ export function CaptureSourcePicker({
                 type="button"
                 className="lr-source-option is-action"
                 aria-label={t("host.sourcePicker.browser")}
+                aria-current={browserSelected || undefined}
                 disabled={selectionDisabled || !browserSupported}
                 onClick={onBrowser}
               >
@@ -374,6 +398,7 @@ export function CaptureSourcePicker({
                   <CaptureSourceOption
                     key={nativeCaptureTargetKey(target)}
                     target={target}
+                    selected={nativeCaptureTargetKey(target) === selectedTargetKey}
                     disabled={
                       selectionDisabled || exclusionUnavailable || (audioLocked && shareAudio && !supportsAudio(target))
                     }
@@ -411,6 +436,7 @@ export function CaptureSourcePicker({
             </span>
           ) : null}
         </div>
+        {footer && <div className="lr-source-picker-footer">{footer}</div>}
       </div>
     </div>
   );
@@ -418,11 +444,13 @@ export function CaptureSourcePicker({
 
 function CaptureSourceOption({
   target,
+  selected = false,
   disabled,
   onPreview,
   onSelect,
 }: {
   target: NativeCaptureTarget;
+  selected?: boolean;
   disabled: boolean;
   onPreview: (
     target: NativeCaptureTarget,
@@ -480,5 +508,5 @@ function CaptureSourceOption({
     icon={target.kind === "picker" ? "share" : target.kind}
     hint={target.kind === "picker" ? "hint-source-picker" : target.kind === "display" ? "hint-capture-display" : "hint-capture-window"}
     preview={target.kind === "picker" ? undefined : preview} nativeKey={nativeCaptureTargetKey(target)} buttonRef={buttonRef}
-    disabled={disabled} onPreview={requestPreview} onSelect={onSelect} />;
+    selected={selected} disabled={disabled} onPreview={requestPreview} onSelect={onSelect} />;
 }

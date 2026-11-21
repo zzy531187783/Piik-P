@@ -119,7 +119,9 @@ versions of the product UI.
 A remembered App activation permits discovery when choosing a source or
 receiving media; it does not make App a prerequisite for sharing. Idle Host
 pages hold no App control session. The shared source selector orders Browser,
-Camera, Window and Screen, defaulting to Window after App detection. An App that
+Camera, Window and Screen, defaulting to Window after App detection. Before a
+share exists it also asks resolution (1080p or 2K) and frame rate (30 or 60), and
+starts only on one confirmation; source sound stays in that same panel. An App that
 provides only a system picker gets one combined choice in place of Window and
 Screen. Browser and Camera choices require their respective Browser APIs;
 temporary restrictions keep a supported choice disabled. Without an App,

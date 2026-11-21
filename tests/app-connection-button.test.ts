@@ -16,6 +16,8 @@ import { setCopy, t } from "../src/client/ui/copy";
 import { APP_PROTOCOL, channelAppDiscovery } from "../src/client/channel/app-link";
 import { CHANNEL_PROTOCOL } from "../src/client/channel/protocol";
 import { NATIVE_CLIENT_PORT_START } from "../src/client/native/discovery-ports";
+import { nativeCaptureTargetKey } from "../src/client/native/capture-selection";
+import type { NativeCaptureTarget } from "../src/client/native/wire";
 
 vi.mock("react", async importOriginal => {
   const actual = await importOriginal<typeof import("react")>();
@@ -153,6 +155,46 @@ describe("shared App connection entry", () => {
     const watch = picker.match(/<button\b[^>]*aria-label="Watch together"[^>]*>/)![0];
     expect(watch.includes("disabled")).toBe(false);
   });
+  it("asks source, size, frame rate and audio in one step before starting a share", () => {
+    setCopy({ lang: "en" });
+    vi.stubGlobal("navigator", { mediaDevices: { getDisplayMedia: vi.fn(), getUserMedia: vi.fn() } });
+    const channel = { quality: DEFAULT_QUALITY_SETTINGS, setQuality: vi.fn(), appConnected: false, pending: new Set(),
+      videoCodecMode: "auto", encodingExecution: "auto",
+      browserCapturePreparation: () => undefined, nativeCaptureRequest: () => undefined, nativeCaptureSelection: () => undefined,
+      externalInput: () => undefined, screenQuality: () => undefined, screenCodecMode: () => undefined,
+      screenEncodingExecution: () => undefined, sourceAudio: () => undefined, sourceMicrophone: () => undefined,
+      sourceMicrophones: () => Promise.resolve([]), cameraPreviews: () => Promise.resolve([]), nativePreview: async () => null,
+      ownedScreens: new Set(), streams: new Map(),
+      state: { channel: { rooms: [{ id: "room", name: "Friday" }] }, publications: [], voice: [], watchActivities: [], watchSubscriptions: [] },
+    } as unknown as ChannelController;
+    const windowTarget: NativeCaptureTarget = { kind: "window", sourceId: "1", title: "Owned Native window", pid: 1, creationTime: "1" };
+    const sources = { kind: "ready" as const, codecs: ["h264"], softwareEncodingCodecs: ["h264"],
+      processAudio: true, systemAudio: true, sources: [windowTarget] };
+    vi.mocked(useState).mockReturnValueOnce([true, vi.fn()])
+      .mockReturnValueOnce([false, vi.fn()])
+      .mockReturnValueOnce([false, vi.fn()])
+      .mockReturnValueOnce([null, vi.fn()])
+      .mockReturnValueOnce([sources, vi.fn()]);
+    const html = renderToStaticMarkup(createElement(ChannelShareControl, { onWatch() {}, channel, roomId: "room", disabled: false }));
+    expect(html).toContain("c3-share-start");
+    expect(html).toContain(">1080p<");
+    expect(html).toContain(">2K<");
+    expect(html).toContain(">30 fps<");
+    expect(html).toContain(">60 fps<");
+    expect(html).toContain("1920 × 1080 · 30 fps · 5 Mbps");
+    const footer = html.slice(html.indexOf("c3-share-start"));
+    const start = footer.match(/<button\b[^>]*aria-label="Start sharing"[^>]*>/)![0];
+    expect(start).toContain("disabled");
+    const picker = renderToStaticMarkup(createElement(CaptureSourcePicker, {
+      nativeSources: sources, initialTab: "window",
+      selectedTargetKey: nativeCaptureTargetKey(windowTarget),
+      onBrowser: vi.fn(), onCamera: vi.fn(), onNative: vi.fn(), onPreview: async () => null,
+      onRefresh: vi.fn(), onCancel: vi.fn(),
+    }));
+    expect(picker).toContain('aria-current="true"');
+    expect(picker).toContain('data-native-source=');
+  });
+
   it("binds live controls to their owned publication without retargeting a retired source", () => {
     setCopy({ lang: "en" });
     vi.stubGlobal("navigator", { mediaDevices: { getDisplayMedia: vi.fn() } });
@@ -175,6 +217,7 @@ describe("shared App connection entry", () => {
     const header = renderToStaticMarkup(createElement(ChannelShareControl, { onWatch() {}, channel, roomId: "room", disabled: false }));
     expect(header).toContain('aria-label="Switch source in Friday"');
     expect(header).toContain('aria-label="Share settings in Friday"');
+    expect(header).not.toContain("c3-share-start");
     expect(screenQuality.mock.calls).toEqual([["mine"], ["mine"]]);
     expect(renderToStaticMarkup(createElement(ChannelShareControl, { onWatch() {}, channel, roomId: "room", publicationId: "retired", disabled: false }))).toBe("");
     const elsewhere = renderToStaticMarkup(createElement(ChannelShareControl, { onWatch() {}, channel, roomId: "other", disabled: false }));
@@ -219,6 +262,7 @@ describe("Native sharing capabilities", () => {
       // Open the real picker with the same completed targets response on each render.
       vi.mocked(useState).mockReturnValueOnce([!settings, vi.fn()]).mockReturnValueOnce([settings, vi.fn()])
         .mockReturnValueOnce([false, vi.fn()])
+        .mockReturnValueOnce([null, vi.fn()])
         .mockReturnValueOnce([sources, vi.fn()]);
       return renderToStaticMarkup(createElement(ChannelShareControl, { onWatch() {}, channel: channel as unknown as ChannelController,
         roomId: "room", publicationId: channel.ownedScreens.has("mine") ? "mine" : undefined, disabled: false }));

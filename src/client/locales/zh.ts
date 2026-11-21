@@ -1330,6 +1330,10 @@ export const zh = {
   "host.quality.720p30": "720p 30\u00a0帧",
   "host.quality.1080p30": "1080p 30\u00a0帧",
   "host.quality.1080p60": "1080p 60\u00a0帧",
+  "host.quality.1440p30": "2K 30\u00a0帧",
+  "host.quality.1440p60": "2K 60\u00a0帧",
+  "host.quality.2k": "2K",
+  "host.quality.2k60": "2K 高帧率",
   "host.advanced": "分享设置",
   "host.settings.button": "分享设置",
 

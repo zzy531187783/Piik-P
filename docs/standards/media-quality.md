@@ -150,13 +150,15 @@ only the latest applied choice. Storage failure never fails capture or startup.
 This does not retain capture permission, device/session identity, routing policy
 or microphone activation, and reading settings claims no Native media session.
 
-The three recommended profiles are ceilings, not delivery guarantees:
+The five recommended profiles are ceilings, not delivery guarantees:
 
 | Profile | Target | Video bitrate ceiling |
 | --- | --- | ---: |
 | `720p30` | 1280x720 at 30 fps | 3 Mbps |
 | `1080p30` | 1920x1080 at 30 fps | 5 Mbps |
 | `1080p60` | 1920x1080 at 60 fps | 8 Mbps |
+| `1440p30` | 2560x1440 at 30 fps | 10 Mbps |
+| `1440p60` | 2560x1440 at 60 fps | 16 Mbps |
 
 `1080p30` is the default. The 2.0 contract carries numeric width/height ceilings;
 480p, 720p, 1080p, 1440p and 4K are UI shortcuts. Advanced picture settings also
@@ -168,7 +170,7 @@ authorize an adapter to exceed its local capture, codec or allocation limits.
 Numeric requests use representational bounds rather than the current control
 ranges. Current capture admits integer 1..240 fps and 0.1..240 Mbps, further
 limited by picture size. Advanced controls accept typed values alongside sliders;
-the three recommended profiles and default remain unchanged. These are useful
+the five recommended profiles and default remain unchanged. These are useful
 product controls, not universal codec
 limits or a minimum for framework-driven output. Codec and resource budgets
 apply separately. App descriptions may advertise stronger capabilities;

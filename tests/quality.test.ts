@@ -110,16 +110,23 @@ describe("realtime quality controls", () => {
     }
   });
 
-  it("keeps exactly three recommended profiles with 1080p30 as the default", () => {
+  it("keeps five recommended profiles with 1080p30 as the default", () => {
     expect(Object.keys(QUALITY_PROFILES)).toEqual([
       "720p30",
       "1080p30",
       "1080p60",
+      "1440p30",
+      "1440p60",
     ]);
     expect(QUALITY_PROFILES["1080p30"]).toMatchObject({
       resolution: { width: 1920, height: 1080 },
       maxFramerate: 30,
       maxBitrate: 5_000_000,
+    });
+    expect(QUALITY_PROFILES["1440p60"]).toMatchObject({
+      resolution: { width: 2560, height: 1440 },
+      maxFramerate: 60,
+      maxBitrate: 16_000_000,
     });
   });
 

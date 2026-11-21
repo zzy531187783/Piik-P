@@ -37,14 +37,17 @@ use their own invitation or password; send those invitations only to intended
 guests. Each room owner manages that room's access and invitation resets;
 see [getting started](./getting-started.md).
 
-## Share settings
+## Start a share
 
-Before starting, open **Share settings → Picture** beside **Start sharing**.
-During a share, use the same control on that picture's card. If you are browsing
-another room, use **Return** in the activity strip first. Choose a
-preset, or expand **Fine-tune picture** to set resolution, frame rate and bitrate.
-Choose the video codec before starting the share. Available codecs depend on
-the browser or connected App.
+**Start sharing** asks everything in one place: choose the source, then its
+resolution (1080p or 2K) and frame rate (30 or 60 fps), and turn on source sound
+where the source supports it. Nothing starts until you confirm **Start sharing**
+in that same panel. The panel also switches the source of an active share.
+
+Use **Share settings** on the picture's card to change presets, fine-tune
+resolution, frame rate and bitrate, choose the video codec, or adjust source sound
+during a share. If you are browsing another room, use **Return** in the activity
+strip first.
 
 ![Share settings with presets and a separate section for detailed picture controls.](../assets/guide/channel-quality.en.png#gh-light-mode-only)
 ![Share settings with presets and a separate section for detailed picture controls.](../assets/guide/channel-quality.en.dark.png#gh-dark-mode-only)

@@ -2,7 +2,8 @@ import { WatchEmbedPreview } from "./WatchEmbedPreview";
 import { canUseYouTubePlayer, youtubeVideoId } from "../watch-youtube-source";
 import { WatchIndexedTrackPicker, WatchMpdSourcePicker } from "./WatchIndexedTrackPicker";
 import { indexedMediaSelection } from "../watch-indexed-source";
-import type { NativePageIndexedSelection, NativePageMpdSelection } from "../../native/wire";
+import type { NativeCaptureTarget, NativePageIndexedSelection, NativePageMpdSelection } from "../../native/wire";
+import { nativeCaptureTargetKey } from "../../native/capture-selection";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { CaptureSourcePicker, type NativeSourceList } from "../../components/living/CaptureSourcePicker";
 import { Btn, SwitchItem } from "../../components/living/primitives";
@@ -27,6 +28,13 @@ import "./channel-share-control.css";
 import "./channel-interface-control.css";
 import { CaptureSourceCard } from "../../components/living/CaptureSourceCard";
 import { BrandLoader } from "../../components/living/BrandMark";
+import { Glyph } from "../../ui/icons";
+import { ShareStartOptions } from "./ShareStartOptions";
+
+type PendingShare =
+  | { kind: "native"; target: NativeCaptureTarget; audio: boolean; border: boolean; excludeAudio?: NativeCaptureTarget }
+  | { kind: "browser" }
+  | { kind: "camera"; deviceId: string };
 
 function ScreenDirectLimit({ sharing, channel, roomLimit, disabled }: {
   sharing: Extract<ChannelPublication, { kind: "screen" }>; channel: ChannelController; roomLimit: number; disabled: boolean;
@@ -103,6 +111,7 @@ export function ChannelShareControl({ channel, roomId, publicationId, compact = 
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [externalOpen, setExternalOpen] = useState(false);
+  const [pending, setPending] = useState<PendingShare | null>(null);
   const [sources, setSources] = useState<Exclude<NativeSourceList, { kind: "ready" }> | ({ kind: "ready" } & NativeCaptureSources)>({ kind: "browser" });
   const { appConnected, nativeSources, startNativeScreen, startScreen } = channel;
   const browserSupported = typeof navigator !== "undefined" && typeof navigator.mediaDevices?.getDisplayMedia === "function";
@@ -113,6 +122,9 @@ export function ChannelShareControl({ channel, roomId, publicationId, compact = 
   const sharing = channel.state?.publications.find(publication => publication.kind === "screen" &&
     (!publicationId || publication.id === publicationId) && publication.roomId === roomId && channel.ownedScreens.has(publication.id));
   const watching = channel.state?.watchActivities.find(activity => activity.roomId === roomId && activity.sessionId === channel.sessionId);
+  // Before a share exists the picker asks source, quality and audio once and
+  // starts on one confirmation; an active share keeps the immediate switch flow.
+  const oneStep = !sharing;
   const pageWatch = watching && !!channel.watchPlayers.get(watching.id)?.media.page;
   const room = sharing ? channel.state?.channel.rooms.find(room => room.id === roomId) : undefined;
   const roomName = room?.name;
@@ -157,7 +169,9 @@ export function ChannelShareControl({ channel, roomId, publicationId, compact = 
     ? t("screen.switchRoomSource", { room: roomName })
     : label;
   // The inner grid scrolls independently, so its clipped outer scrollHeight cannot size placement.
-  useAnchoredPopover(trigger, panel, { maxHeight: 560, preferredHeight: 560, minVisibleHeight: 360 });
+  useAnchoredPopover(trigger, panel, oneStep
+    ? { maxHeight: 700, preferredHeight: 700, minVisibleHeight: 420 }
+    : { maxHeight: 560, preferredHeight: 560, minVisibleHeight: 360 });
   useAnchoredPopover(settingsTrigger, settingsPanel, { maxHeight: 640, preferredHeight: 640, minVisibleHeight: 240 });
   const close = useCallback(() => { panel.current?.hidePopover(); settingsPanel.current?.hidePopover(); }, []);
   const refresh = useCallback(() => {
@@ -177,6 +191,7 @@ export function ChannelShareControl({ channel, roomId, publicationId, compact = 
     return () => { request.current = null; };
   }, [open, settingsOpen, refresh]);
   useLayoutEffect(() => { close(); }, [roomId, publicationId, disabled, close]);
+  useEffect(() => { setPending(null); }, [roomId, publicationId]);
   useEffect(() => { setExternalOpen(false); }, [roomId]);
   useEffect(() => {
     if (!openRequested || disabled || !panel.current) return;
@@ -184,9 +199,48 @@ export function ChannelShareControl({ channel, roomId, publicationId, compact = 
     onPickerOpened?.();
   }, [openRequested, disabled, onPickerOpened]);
   const start = (operation: () => Promise<void>) => {
+    setPending(null);
     close();
     void operation().catch(() => {}); // The session owns the operation's error.
   };
+  const selectNative = (target: NativeCaptureTarget, audio: boolean, border: boolean, excludeAudio?: NativeCaptureTarget) => {
+    if (!oneStep) { start(() => startNativeScreen(roomId, target, audio, excludeAudio, border)); return; }
+    setPending({ kind: "native", target, audio, border, excludeAudio });
+  };
+  const selectBrowser = () => {
+    if (!oneStep) { start(() => startScreen(roomId)); return; }
+    setPending({ kind: "browser" });
+  };
+  const selectCamera = (deviceId: string) => {
+    if (!oneStep) { start(() => startScreen(roomId, "camera", deviceId)); return; }
+    setPending({ kind: "camera", deviceId });
+  };
+  const updatePendingOptions = useCallback((options: { audio: boolean; border: boolean; excludeAudio?: NativeCaptureTarget }) => {
+    setPending(current => current?.kind === "native" ? { ...current, ...options } : current);
+  }, []);
+  const confirmStart = () => {
+    if (!pending) return;
+    if (pending.kind === "native") start(() => startNativeScreen(roomId, pending.target, pending.audio, pending.excludeAudio, pending.border));
+    else if (pending.kind === "camera") start(() => startScreen(roomId, "camera", pending.deviceId));
+    else start(() => startScreen(roomId));
+  };
+  const pendingLabel = pending?.kind === "native"
+    ? (pending.target.kind === "picker" ? t("host.sourcePicker.system") : pending.target.title)
+    : pending?.kind === "browser" ? t("host.sourcePicker.browser")
+    : pending?.kind === "camera" ? t("host.sourcePicker.tab.camera") : null;
+  const startFooter = oneStep ? <div className="c3-share-start">
+    <ShareStartOptions value={quality} disabled={disabled || busy}
+      onChange={profile => channel.setQuality(profile)} />
+    <div className="c3-share-start-actions">
+      <span className="c3-share-start-choice" role="status">
+        {pendingLabel
+          ? <><Glyph name="check" size={16} /><span>{pendingLabel}</span></>
+          : <span>{t("host.sourcePicker.title")}</span>}
+      </span>
+      <Btn icon="cast" title="host.start" cap="host.start" tone="primary" size="compact"
+        disabled={!pending || disabled || busy} busy={busy} onClick={confirmStart} />
+    </div>
+  </div> : undefined;
   if (publicationId && !sharing) return null;
   return <><span className="c3-share-feedback"><span className="c3-share-actions" role="group" aria-label={t("screen.screenSharing")}>
     <span ref={trigger} className="c3-share-control">
@@ -270,21 +324,31 @@ export function ChannelShareControl({ channel, roomId, publicationId, compact = 
           }} /></>} />}</>}
       </div>
     </div>
-    <div ref={panel} id={id} popover="auto" className="lr-anchored-card c3-share-picker"
-      onToggle={event => { if (event.target === event.currentTarget) setOpen(event.newState === "open"); }}>
+    <div ref={panel} id={id} popover="auto"
+      className={`lr-anchored-card c3-share-picker${oneStep ? " has-share-start" : ""}`}
+      onToggle={event => {
+        if (event.target !== event.currentTarget) return;
+        setOpen(event.newState === "open");
+        if (event.newState !== "open") setPending(null);
+      }}>
       {open && <CaptureSourcePicker nativeSources={pickerSources} browserSupported={browserSupported} cameraSupported={cameraSupported}
-        loadCameras={channel.cameraPreviews} initialCamera={currentCamera}
+        loadCameras={channel.cameraPreviews}
+        initialCamera={sharing ? currentCamera : pending?.kind === "camera" ? pending.deviceId : undefined}
         initialTab="window" selectionDisabled={disabled || busy || qualityPending || microphonePending}
         initialAudio={selectedNative?.audio} initialExcludeAudio={selectedNative?.excludeAudio} initialShowCaptureBorder={selectedNative?.showCaptureBorder}
-        onBrowser={() => start(() => startScreen(roomId))}
+        selectedTargetKey={pending?.kind === "native" ? nativeCaptureTargetKey(pending.target) : undefined}
+        browserSelected={pending?.kind === "browser"}
+        onOptionsChange={updatePendingOptions}
+        footer={startFooter}
+        onBrowser={selectBrowser}
         onWatch={() => { close(); trigger.current?.querySelector("button")?.focus({ preventScroll: true }); onWatch(); }}
-        onCamera={deviceId => start(() => startScreen(roomId, "camera", deviceId))}
+        onCamera={selectCamera}
         onExternalInput={channel.externalScreenInputAvailable ? () => {
           close();
           if (externalInput) setExternalOpen(true);
           else void channel.startExternalScreen(roomId).then(() => setExternalOpen(true)).catch(() => {});
         } : undefined}
-        onNative={(target, audio, border, excludeAudio) => start(() => startNativeScreen(roomId, target, audio, excludeAudio, border))}
+        onNative={selectNative}
         onPreview={channel.nativePreview} onRefresh={refresh} onCancel={() => {
           close(); trigger.current?.querySelector("button")?.focus({ preventScroll: true });
         }} />}
