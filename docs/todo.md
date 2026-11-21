@@ -29,6 +29,13 @@ the feedback period; they do not delay that delivery.
   invite-only public Demo discovery, removal of offline rooms and archive
   recovery on the supported distributions. The [hosting design](./research/server-hosting-plan.md)
   owns the lightweight, hosted and moderation contracts.
+- [ ] **Multi-domain Server acceptance.** Deploy one Server with several domains
+  and hosted rooms to a real origin; verify the domain list and rail, text and
+  voice channels, per-domain identity, TLS origin and UDP reachability across
+  independent networks. Loopback controls do not establish public-network behavior.
+- [ ] **Domain invite codes.** Decide whether joining a domain requires an
+  operator/owner invite code or stays an open site; without accounts, identity
+  remains device-local and cannot be recovered after switching machines.
 - [ ] **Physical camera orientation.** Check portrait capture on a phone through
   Native and pooled Browser paths. Compare the orientation of the source and
   the decoded viewer picture after a device rotation.

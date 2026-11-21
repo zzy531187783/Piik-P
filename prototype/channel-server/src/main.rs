@@ -26,13 +26,24 @@ async fn main() -> anyhow::Result<std::process::ExitCode> {
         println!("{}", serde_json::to_string(&result)?);
         return Ok(std::process::ExitCode::from(result.exit_code()));
     }
+    let executable = std::env::current_exe().context("Locate the Server executable")?;
+    let resources = executable.parent().context("Locate the Server directory")?;
+    let directory = std::env::var_os("PIIK_CHANNEL_DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| resources.join("data"));
+    let frontend = std::env::var_os("PIIK_CHANNEL_WEB_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| resources.join("web"));
     let room_creation_policy = first_start_setting(
         "PIIK_CHANNEL_ROOM_CREATION_POLICY",
         RoomCreationPolicy::Ordinary,
     )?;
     // A multi-domain Server hosts rooms itself so channels outlive their creators;
-    // the single-site Server keeps the lightweight default.
-    let multi_domain = std::env::var_os("PIIK_CHANNEL_DOMAINS").is_some();
+    // the single-site Server keeps the lightweight default. The registry file
+    // keeps that mode on later starts that no longer pass PIIK_CHANNEL_DOMAINS.
+    let multi_domain = std::env::var("PIIK_CHANNEL_DOMAINS")
+        .is_ok_and(|value| !value.trim().is_empty())
+        || directory.join("domains.json").is_file();
     let hosting_mode = first_start_setting(
         "PIIK_CHANNEL_HOSTING_MODE",
         if multi_domain {
@@ -54,14 +65,6 @@ async fn main() -> anyhow::Result<std::process::ExitCode> {
     // Existing domain data owns its keys; environment values seed a new domain.
     let owner = std::env::var("PIIK_CHANNEL_OWNER_KEY").unwrap_or_default();
     let ice_servers = piik_channel_prototype::ice_servers_from_environment()?;
-    let executable = std::env::current_exe().context("Locate the Server executable")?;
-    let resources = executable.parent().context("Locate the Server directory")?;
-    let directory = std::env::var_os("PIIK_CHANNEL_DATA_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| resources.join("data"));
-    let frontend = std::env::var_os("PIIK_CHANNEL_WEB_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| resources.join("web"));
     let routes = web::frontend(&frontend)
         .with_context(|| format!("Load Server frontend from {}", frontend.display()))?;
     let listener = tokio::net::TcpListener::bind((address, port)).await?;

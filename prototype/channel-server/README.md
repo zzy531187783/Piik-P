@@ -38,7 +38,9 @@ explains saved data and backup scope.
 The Rust Server reads process environment variables; it does not load `.env`
 automatically. Compose and systemd load their environment files for it. The
 [environment template](../../deploy/container/.env.example) owns the deployment
-example. The [published 2.x guide](https://github.com/TNTcraftHIM/Piik/blob/eef70ffda0ffddce6aec109521ab70871e5b7c2f/docs/operations/self-hosting.md)
+example. Set `PIIK_CHANNEL_DOMAINS` to host several domains on one Server; the
+root lists them and each serves its page at `/d/<domain-id>/`. The
+[published 2.x guide](https://github.com/TNTcraftHIM/Piik/blob/eef70ffda0ffddce6aec109521ab70871e5b7c2f/docs/operations/self-hosting.md)
 describes a different runtime and its SFU controls.
 
 ### Packaged Server

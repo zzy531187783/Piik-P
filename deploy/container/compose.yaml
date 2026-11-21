@@ -14,7 +14,10 @@ services:
       PIIK_CHANNEL_PORT: 8787
       PIIK_CHANNEL_UDP_PORT: ${PIIK_CHANNEL_UDP_PORT:-8787}
       PIIK_CHANNEL_DATA_DIR: /home/nonroot
-      PIIK_CHANNEL_OWNER_KEY: ${PIIK_CHANNEL_OWNER_KEY:?Set a private stable owner key}
+      # Single site: seed a new site with a private stable owner key.
+      PIIK_CHANNEL_OWNER_KEY: ${PIIK_CHANNEL_OWNER_KEY:-}
+      # Several domains: comma-separated name=seed list; omit for a single site.
+      PIIK_CHANNEL_DOMAINS: ${PIIK_CHANNEL_DOMAINS:-}
     ports:
       - "127.0.0.1:8787:8787/tcp"
       - "${PIIK_CHANNEL_UDP_PORT:-8787}:${PIIK_CHANNEL_UDP_PORT:-8787}/udp"
