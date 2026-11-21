@@ -586,6 +586,7 @@ export const en: Record<CopyKey, string> = {
   "channel.error.backupContentLimit": "The backup's file originals exceed its file-count or size limit. When exporting, turn off “{option}” to keep the complete history without those originals.",
   "channel.error.actionFailed": "Could not complete the action. Please try again.",
   "channel.error.busy": "Another operation is in progress. Try again shortly.",
+  "channel.error.shareLimit": "This room already has two screen shares. Stop one before starting another.",
   "channel.error.roomCreationRestricted": "This room does not meet the site’s room creation policy.",
   "state.peer.present": "In the room",
   "state.peer.voiceConnected": "Voice connected",

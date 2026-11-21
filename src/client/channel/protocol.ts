@@ -4,6 +4,8 @@ export type { WatchFormat } from "../../shared/watch-format";
 import { videoSettingsSchema, type VideoSettings } from "../../shared/protocol";
 import { DEFAULT_RELAY_CAPACITY, MAX_RELAY_CAPACITY } from "../../shared/relay-capacity";
 export { DEFAULT_RELAY_CAPACITY, MAX_RELAY_CAPACITY } from "../../shared/relay-capacity";
+/** Mirrors the room host's per-room screen share cap. */
+export const MAX_SCREEN_SHARES = 2;
 
 // This is the experimental channel wire boundary; production room contracts stay separate.
 const id = z.string().min(1).max(128);

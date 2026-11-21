@@ -746,6 +746,9 @@ pub struct Track {
     pub stream_id: String,
 }
 
+/// Two independent screen shares can be active in one room at a time.
+pub const MAX_SCREEN_SHARES: usize = 2;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RoomKind {

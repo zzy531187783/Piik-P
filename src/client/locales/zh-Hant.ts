@@ -472,6 +472,7 @@ export const zhHant = {
   "channel.error.disconnected": "連線已中斷，請重新連線後再試。",
   "channel.error.actionFailed": "未能完成操作，請重試。",
   "channel.error.busy": "有操作正在進行，請稍後重試。",
+  "channel.error.shareLimit": "這個房間已有兩路畫面分享，請先停止一路。",
   "state.peer.present": "已在房間",
   "state.peer.voiceConnected": "語音已連線",
   "host.topology.idle": "已在房間，暫無媒體線路。",

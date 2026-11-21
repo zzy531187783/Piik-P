@@ -922,6 +922,16 @@ impl RoomRuntime {
                     .source = source;
             }
         } else {
+            if kind == Kind::Screen
+                && self
+                    .publications
+                    .values()
+                    .filter(|publication| publication.info.kind == Kind::Screen)
+                    .count()
+                    >= crate::wire::MAX_SCREEN_SHARES
+            {
+                return Err("share_limit");
+            }
             if self.publications.values().any(|publication| {
                 publication.info.session_id == session && publication.info.kind == kind
             }) {
@@ -2202,6 +2212,44 @@ mod tests {
             .unwrap();
         room.reconcile(&endpoints, 0);
         (room, endpoints)
+    }
+
+    #[test]
+    fn room_admits_two_screen_shares_then_requires_one_to_stop() {
+        let id = Uuid::from_u128;
+        let (mut room, endpoints) = screen_on_room_base();
+        let screen = || Some(crate::wire::ScreenSource::default());
+        room.publish(
+            endpoints[&id(4)].member,
+            id(4),
+            id(11),
+            Kind::Screen,
+            screen_settings(),
+            screen(),
+        )
+        .unwrap();
+        assert_eq!(
+            room.publish(
+                endpoints[&id(2)].member,
+                id(2),
+                id(12),
+                Kind::Screen,
+                screen_settings(),
+                screen()
+            )
+            .err(),
+            Some("share_limit")
+        );
+        room.unpublish(id(3), id(10)).unwrap();
+        room.publish(
+            endpoints[&id(2)].member,
+            id(2),
+            id(12),
+            Kind::Screen,
+            screen_settings(),
+            screen(),
+        )
+        .unwrap();
     }
 
     #[test]

@@ -12,6 +12,7 @@ export function channelErrorPresentation(error: string | null, t: (key: CopyKey,
   const display = (key: CopyKey, connectionHelp = false): ChannelErrorPresentation => ({ message: t(key), connectionHelp });
   if (!error) return { message: null, connectionHelp: true };
   if (error === "room_busy") return display("channel.error.busy");
+  if (error === "share_limit") return display("channel.error.shareLimit");
   if (error === "room_creation_restricted") return display("channel.error.roomCreationRestricted");
   if (error === "attachment_unavailable" || error === "file_unavailable" || error === "file_source_unavailable")
     return display("channel.attachment.sourceUnavailable");

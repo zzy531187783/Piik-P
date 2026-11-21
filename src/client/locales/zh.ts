@@ -584,6 +584,7 @@ export const zh = {
   "channel.error.backupContentLimit": "备份中的文件原件超过数量或总大小限制。导出时可取消“{option}”，保留完整历史但不附带这些原件。",
   "channel.error.actionFailed": "未能完成操作，请重试。",
   "channel.error.busy": "有操作正在进行，请稍后重试。",
+  "channel.error.shareLimit": "这个房间已有两路画面分享，请先停止一路。",
   "channel.error.roomCreationRestricted": "这间房间不符合本站点的创建规则。",
   "state.peer.present": "已在房间",
   "state.peer.voiceConnected": "语音已连接",
