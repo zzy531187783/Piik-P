@@ -94,6 +94,16 @@ export function RoomForm({ room, value, onChange, roomHost, inviteOnly, disabled
     <ChannelIdentityFields name={name} icon={icon} label={t("room.settings.name")}
       roomPicture={{ value: value.picture === undefined ? room?.picture ?? null : value.picture, onChange: picture => change({ picture }) }}
       disabled={disabled} onName={name => change({ name })} onIcon={icon => change({ icon })} imageBusy={imageBusy} onImageBusyChange={setImageBusy} />
+    {!room && <><fieldset className="lr-toggle c3-room-kind" disabled={disabled}>
+      <legend className="visually-hidden">{t("room.kind.label")}</legend>
+      {(["text", "voice"] as const).map(kind => <label key={kind}>
+        <input type="radio" name="room-kind" value={kind} checked={value.kind === kind}
+          onChange={() => change({ kind })} />
+        <span><Glyph name={kind === "text" ? "chat" : "headphones"} size={18} />
+          {t(`room.kind.${kind}`)}</span>
+      </label>)}
+    </fieldset>
+    <p>{t(value.kind === "text" ? "room.kind.textNote" : "room.kind.voiceNote")}</p></>}
     {inviteOnly ? <p>{t("room.settings.inviteOnlyNote")}</p> : <>
       <fieldset className="lr-toggle c3-room-access" disabled={disabled}>
         <legend className="visually-hidden">{t("room.settings.admission")}</legend>

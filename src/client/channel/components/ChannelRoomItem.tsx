@@ -32,9 +32,10 @@ export function ChannelRoomItem({ room, selected, voice = false, sharing = false
         <ChannelIdentityMark icon={room.icon} picture={selected && room.authorized && room.available && room.reading ? room.picture : undefined} size={21} />
         <strong>{room.name}</strong>
         <span className="c3-room-activity" aria-hidden="true">
+          {room.kind === "text" && <Glyph name="chat" size={13} />}
           {room.access === "private" && <Glyph name="lock" size={13} />}
           {!room.available && <span>{t("room.item.offline")}</span>}
-          {voice && <Glyph name="headphones" size={14} />}
+          {voice && room.kind !== "text" && <Glyph name="headphones" size={14} />}
           {sharing ? <Glyph name="cast" size={14} /> : viewing ? <Glyph name={viewingAppearance[viewing].icon} size={14} />
             : sourceCount > 0 ? <span>{sourceCount}<Glyph name="tv" size={13} /></span> : null}
         </span>

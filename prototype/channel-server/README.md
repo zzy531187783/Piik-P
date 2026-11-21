@@ -94,7 +94,9 @@ domain's directory is created. Domains live under `data/domains/<slug>/` and
 environment value. Each domain keeps its own rooms, members and owner key and
 serves its page at `/d/<domain-id>/`; the root lists the domains. This mode
 does not use `PIIK_CHANNEL_OWNER_KEY`. Repeating an existing name keeps its
-domain; add a new `name=seed` entry to create another one.
+domain; add a new `name=seed` entry to create another one. A domain created in
+this mode defaults to `hosted` room hosting so its channels outlive their
+creators; set `PIIK_CHANNEL_HOSTING_MODE` explicitly to override that default.
 
 The first startup creates Living room, Studio and Quiet corner under the Server's
 Native endpoint. Enter one of those rooms and share/watch normally to use its
@@ -525,7 +527,12 @@ The guide-image generator uses the same component catalogue.
 ## Rooms, conversation and media
 
 A site contains rooms. Anyone opening the site can create and manage their own
-rooms as a room owner (房主). The site operator maintains site metadata and backups;
+rooms as a room owner (房主). A room is a text channel or a voice channel; the
+creator chooses the kind when creating it, and later edits keep that kind. Text
+channels keep conversation and presence but do not join voice or offer sharing;
+voice channels keep the existing voice and screen-sharing controls. A
+Server-hosted room persists while its creator is away; a Browser-hosted room
+pauses when its host page closes. The site operator maintains site metadata and backups;
 that does not grant access to or management of another user's room. These users
 can share independently of maintenance or room ownership. Room admission permits
 chatting, voice, sharing and watching without separate role groups. Public rooms

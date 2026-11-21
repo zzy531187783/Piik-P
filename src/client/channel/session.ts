@@ -38,13 +38,14 @@ import { captureBrowserSource, setMediaPaused, type BrowserCaptureSource } from 
 import { loadCameraPreviews, type CameraPreview } from "../media/camera-previews";
 import { readBackup, writeBackup, type BackupMetadata, type RetainedBackupFile } from "./backup-archive";
 import { NativeDomainHosting, NativeRoomHosting } from "./hosting-api";
-import { channelPath } from "./base-path";
+import { channelPath, domainId } from "./base-path";
 import type { RetainedFile } from "./file-store";
 import { automaticVideoCodecPreference, manualVideoCodecPreference, supportsH264Receive, type BrowserVideoCodecMode, type BrowserVideoCodecPreference } from "../webrtc/video-codec";
 import { preferredVideoCodecForTrack } from "../webrtc/video-codec-preflight";
 
-const credentialKey = "piik.channel.prototype.credential";
-const nameKey = "piik.channel.prototype.name";
+const identityScope = domainId ? `:${domainId}` : "";
+const credentialKey = `piik.channel.prototype.credential${identityScope}`;
+const nameKey = `piik.channel.prototype.name${identityScope}`;
 
 interface RoomReading {
   roomId: string;

@@ -30,7 +30,17 @@ async fn main() -> anyhow::Result<std::process::ExitCode> {
         "PIIK_CHANNEL_ROOM_CREATION_POLICY",
         RoomCreationPolicy::Ordinary,
     )?;
-    let hosting_mode = first_start_setting("PIIK_CHANNEL_HOSTING_MODE", HostingMode::Lightweight)?;
+    // A multi-domain Server hosts rooms itself so channels outlive their creators;
+    // the single-site Server keeps the lightweight default.
+    let multi_domain = std::env::var_os("PIIK_CHANNEL_DOMAINS").is_some();
+    let hosting_mode = first_start_setting(
+        "PIIK_CHANNEL_HOSTING_MODE",
+        if multi_domain {
+            HostingMode::Hosted
+        } else {
+            HostingMode::Lightweight
+        },
+    )?;
     let stop = piik_channel_native::shutdown_signal()?;
     let port = std::env::var("PIIK_CHANNEL_PORT")
         .unwrap_or_else(|_| "8791".into())

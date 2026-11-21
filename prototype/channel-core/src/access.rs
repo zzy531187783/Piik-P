@@ -67,6 +67,8 @@ impl RoomAppearance {
 pub struct RoomState {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub kind: crate::wire::RoomKind,
     #[serde(flatten)]
     pub appearance: RoomAppearance,
     pub creator_id: Uuid,
@@ -157,6 +159,7 @@ impl RoomState {
         let mut room = Self {
             id,
             name: String::new(),
+            kind: crate::wire::RoomKind::default(),
             appearance: RoomAppearance::default(),
             creator_id,
             access,
@@ -184,6 +187,12 @@ impl RoomState {
 
     pub fn manages(&self, user: Uuid) -> bool {
         user == self.creator_id
+    }
+
+    /// A room's kind is chosen when it is created; later updates keep it.
+    pub fn with_kind(mut self, kind: crate::wire::RoomKind) -> Self {
+        self.kind = kind;
+        self
     }
     pub fn reads(&self, user: Uuid) -> bool {
         self.access == RoomAccess::Public || self.manages(user) || self.grants.contains(&user)
@@ -276,6 +285,7 @@ impl RoomState {
             delivery: None,
             id: self.id.clone(),
             name: self.name.clone(),
+            kind: self.kind,
             icon: self.appearance.icon.clone(),
             picture: None,
             creator_id: self.creator_id,

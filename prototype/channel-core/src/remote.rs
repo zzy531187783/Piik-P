@@ -272,6 +272,7 @@ impl RemoteRoom {
                 delivery: None,
                 id: summary.id.clone(),
                 name: summary.name.clone(),
+                kind: summary.kind,
                 icon: summary.icon.clone(),
                 picture: None,
                 creator_id: summary.creator_id,

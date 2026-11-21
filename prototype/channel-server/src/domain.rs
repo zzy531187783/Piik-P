@@ -311,7 +311,8 @@ async fn create_room(state: &Domain, connection: Uuid, mut request: Request) {
                 room.access,
                 room.hidden,
                 password,
-            )?;
+            )?
+            .with_kind(room.kind);
             policy.appearance.picture = picture;
             policy.voice_bitrate = room.voice_bitrate;
             policy.relay_capacity = room.relay_capacity;

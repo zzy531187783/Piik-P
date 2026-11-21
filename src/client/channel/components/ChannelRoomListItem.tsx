@@ -16,7 +16,7 @@ export function ChannelRoomListItem({ channel, room, selected, settingsOpen, onS
   const { t } = useCopy();
   const [open, setOpen] = useState(true), id = useId();
   const state = channel.state;
-  const voices = state?.voice.filter(voice => voice.roomId === room.id) ?? [];
+  const voices = room.kind === "text" ? [] : state?.voice.filter(voice => voice.roomId === room.id) ?? [];
   const people = state && !ordering ? roomActivityPeople(state, room.id, channel.profiles, channel) : [];
   const screens = state?.publications.filter(source => source.roomId === room.id && source.kind === "screen") ?? [];
   const watches = state?.watchActivities.filter(source => source.roomId === room.id) ?? [];

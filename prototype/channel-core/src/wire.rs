@@ -746,6 +746,14 @@ pub struct Track {
     pub stream_id: String,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RoomKind {
+    Text,
+    #[default]
+    Voice,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Room {
@@ -753,6 +761,8 @@ pub struct Room {
     pub id: String,
     pub name: String,
     pub icon: RoomIcon,
+    #[serde(default)]
+    pub kind: RoomKind,
     #[serde(
         default,
         deserialize_with = "avatar",

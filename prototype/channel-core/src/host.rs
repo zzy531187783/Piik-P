@@ -17,6 +17,8 @@ use uuid::Uuid;
 pub struct RoomSummary {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub kind: crate::wire::RoomKind,
     pub icon: crate::wire::RoomIcon,
     pub creator_id: Uuid,
     pub access: RoomAccess,
@@ -49,6 +51,7 @@ impl RoomSummary {
         Self {
             id: view.id,
             name: view.name,
+            kind: view.kind,
             icon: view.icon,
             creator_id: view.creator_id,
             access: view.access,
@@ -264,6 +267,7 @@ impl RoomProjection {
                 },
                 id: self.summary.id.clone(),
                 name: self.summary.name.clone(),
+                kind: self.summary.kind,
                 icon: self.summary.icon.clone(),
                 picture: if available && view.authorized && view.reading {
                     self.picture.clone()

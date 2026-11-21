@@ -350,6 +350,7 @@ fn image_directory_and_active_host_output_fit_the_domain_socket_budget() {
                 crate::host::RoomSummary {
                     id: room.id.clone(),
                     name: room.name.clone(),
+                    kind: room.kind,
                     icon: room.icon.clone(),
                     creator_id: room.creator_id,
                     access: room.access,
@@ -493,4 +494,35 @@ fn text_limits_match_browser_utf16_and_room_history() {
         0
     )
     .is_err());
+}
+
+#[test]
+fn room_kind_is_chosen_at_creation_and_survives_state_round_trips() {
+    use crate::wire::{RoomAccess, RoomKind};
+    let owner = Uuid::new_v4();
+    let policy = crate::RoomState::new(
+        "room".into(),
+        "Text".into(),
+        Default::default(),
+        owner,
+        RoomAccess::Public,
+        false,
+        None,
+    )
+    .unwrap()
+    .with_kind(RoomKind::Text);
+    assert_eq!(policy.view(owner).unwrap().kind, RoomKind::Text);
+    assert_eq!(
+        crate::host::RoomSummary::from_policy(&policy).kind,
+        RoomKind::Text
+    );
+    let restored: crate::RoomState =
+        serde_json::from_value(serde_json::to_value(&policy).unwrap()).unwrap();
+    assert_eq!(restored.view(owner).unwrap().kind, RoomKind::Text);
+    let legacy: crate::RoomState = serde_json::from_value(serde_json::json!({
+        "id": "room", "name": "Voice", "icon": "couch", "creatorId": owner,
+        "access": "public", "hidden": false, "grants": []
+    }))
+    .unwrap();
+    assert_eq!(legacy.view(owner).unwrap().kind, RoomKind::Voice);
 }

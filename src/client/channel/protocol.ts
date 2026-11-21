@@ -30,8 +30,10 @@ export const userSchema = userSummarySchema.extend({ avatar: identityImageSchema
 export const PROFILE_PAGE_SIZE = 32;
 export const profilePageSchema = z.object({ profiles: z.array(userSchema).max(PROFILE_PAGE_SIZE), total: z.number().int().nonnegative(), nextCursor: id.nullable() });
 export type ProfilePage = z.infer<typeof profilePageSchema>;
+export const roomKindSchema = z.enum(["text", "voice"]).default("voice");
+export type RoomKind = z.infer<typeof roomKindSchema>;
 export const roomSchema = z.object({
-  id, name: identityNameSchema, icon: roomIconSchema, picture: identityImageSchema.optional(), creatorId: id, access: z.enum(["public", "private"]),
+  id, name: identityNameSchema, icon: roomIconSchema, kind: roomKindSchema, picture: identityImageSchema.optional(), creatorId: id, access: z.enum(["public", "private"]),
   hidden: z.boolean(), hasPassword: z.boolean(), authorized: z.boolean(), canManage: z.boolean(),
   voiceBitrate: z.number().int().min(6_000).max(320_000).default(64_000),
   relayCapacity: z.number().int().min(1).max(MAX_RELAY_CAPACITY).default(DEFAULT_RELAY_CAPACITY),
@@ -44,7 +46,7 @@ export const roomSchema = z.object({
   capabilities: z.object({ attachments: z.boolean() }),
   delivery: z.object({ hostSessionId: id, bindingId: id, nextHops: z.record(id, id) }).optional(),
 });
-export const roomSummarySchema = roomSchema.pick({ id: true, name: true, icon: true, creatorId: true, access: true, hidden: true, hasPassword: true, voiceBitrate: true, relayCapacity: true });
+export const roomSummarySchema = roomSchema.pick({ id: true, name: true, icon: true, kind: true, creatorId: true, access: true, hidden: true, hasPassword: true, voiceBitrate: true, relayCapacity: true });
 export const screenSourceSchema = z.object({ kind: z.enum(["screen", "camera"]), name: identityNameSchema.nullable() });
 export type ScreenSource = z.infer<typeof screenSourceSchema>;
 const publicationBaseSchema = z.object({
@@ -260,6 +262,7 @@ export type ConversationReply = ConversationAddress & { record:
 export interface DomainSettings { name: string; icon: string }
 export interface RoomSettings extends DomainSettings {
   picture?: string | null;
+  kind?: RoomKind;
   access: "public" | "private"; hidden: boolean; password?: string | null;
   voiceBitrate?: number;
   relayCapacity?: number;

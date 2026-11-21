@@ -328,3 +328,15 @@
   .c3-shell[data-layout="quick"] { gap: 12px; }
   .c3-shell[data-layout="quick"] .c3-room-heading { display: flex; }
 }
+
+.c3-room-kind-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+}

@@ -1,17 +1,15 @@
 import { useEffect, useState } from "react";
-import { z } from "zod";
 import { ChannelPreviewPage } from "./ChannelPreviewPage";
+import { fetchServerDomains, type ServerDomain } from "../channel/server-domains";
 import { useCopy } from "../ui/copy";
 import { Glyph } from "../ui/icons";
 import "./server-domains-page.css";
-
-const domainsSchema = z.array(z.object({ id: z.uuid(), name: z.string() }));
 
 type State =
   | { kind: "loading" }
   | { kind: "legacy" }
   | { kind: "failed" }
-  | { kind: "ready"; domains: z.infer<typeof domainsSchema> };
+  | { kind: "ready"; domains: ServerDomain[] };
 
 /** A multi-domain Server lists its domains at the root; a single-domain Server keeps the room page. */
 export function ServerDomainsPage() {
@@ -21,18 +19,9 @@ export function ServerDomainsPage() {
   useEffect(() => {
     let current = true;
     setState({ kind: "loading" });
-    fetch("/api/server/domains", { cache: "no-store" }).then(async response => {
+    fetchServerDomains().then(domains => {
       if (!current) return;
-      if (response.status === 404) {
-        setState({ kind: "legacy" });
-        return;
-      }
-      if (!response.ok) {
-        setState({ kind: "failed" });
-        return;
-      }
-      const parsed = domainsSchema.safeParse(await response.json());
-      setState(parsed.success ? { kind: "ready", domains: parsed.data } : { kind: "failed" });
+      setState(domains ? { kind: "ready", domains } : { kind: "legacy" });
     }).catch(() => {
       if (current) setState({ kind: "failed" });
     });

@@ -6,7 +6,7 @@ use piik_channel_core::{
         ConfirmationInput, HistoryRequest, HistoryResult, MessageDraft, StoredMessage, HISTORY_PAGE,
     },
     host::{HostInput, RoomHost as SharedRoomHost},
-    wire::{RoomAccess, RoomIcon},
+    wire::{RoomAccess, RoomIcon, RoomKind},
     RoomState,
 };
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,8 @@ struct NewRoom {
     id: String,
     name: String,
     icon: RoomIcon,
+    #[serde(default)]
+    kind: RoomKind,
     picture: Option<String>,
     creator_id: Uuid,
     access: RoomAccess,
@@ -51,7 +53,8 @@ pub fn create_room_policy(input: &str) -> Result<String, JsValue> {
         input.hidden,
         input.password,
     )
-    .map_err(error)?;
+    .map_err(error)?
+    .with_kind(input.kind);
     if let Some(capacity) = input.relay_capacity {
         policy.relay_capacity = capacity;
     }

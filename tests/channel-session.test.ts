@@ -9121,7 +9121,7 @@ test.each(["registered", "registration-failed"])("portable import retains its ve
     admission.receive({ type: "host_bound", roomId: "imported", bindingId: "imported-binding" });
     admission.receive({ type: "ack", requestId: registration.requestId });
     const restored = structuredClone(state);
-    restored.channel.rooms = [{ id: "imported", name: "First", creatorId: "archived-user", icon: "couch", access: "public", hidden: false, hasPassword: false,
+    restored.channel.rooms = [{ id: "imported", name: "First", creatorId: "archived-user", icon: "couch", kind: "voice", access: "public", hidden: false, hasPassword: false,
       authorized: true, canManage: true, voiceBitrate: 64_000, relayCapacity: 2, relayOverride: null, participantSessionIds: [], lastMessageSeq: 0, fileActivity: [], available: true, reading: false, capabilities: { attachments: true },
       delivery: { hostSessionId: "new-endpoint", bindingId: "imported-binding", nextHops: {} } }];
     admission.receive({ type: "state", state: restored });

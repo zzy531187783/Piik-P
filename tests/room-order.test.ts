@@ -53,7 +53,7 @@ test("a move cannot use a room from outside the group where it started", () => {
 
 test("room navigation and private entry use host availability, not the creator's endpoint presence", () => {
   setCopy({ lang: "en" });
-  const room = { id: "room", name: "Retained room", creatorId: "owner", icon: "couch", access: "private", hasPassword: true,
+  const room = { id: "room", name: "Retained room", creatorId: "owner", icon: "couch", kind: "voice", access: "private", hasPassword: true,
     authorized: false, canManage: false, available: true, fileActivity: [], participantSessionIds: [], lastMessageSeq: 0,
     hidden: false, voiceBitrate: 64000, relayCapacity: 2, relayOverride: null, reading: false, capabilities: { attachments: true } } as ChannelRoom;
   const channel = { connection: "connected", pending: new Set(), readByRoom: {}, ownedScreens: new Set(), profiles: new Map(),
