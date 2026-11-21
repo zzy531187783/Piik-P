@@ -1,0 +1,87 @@
+.lr-share-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(0 0 0 / .45);
+}
+.lr-share-dialog {
+  width: min(920px, 100%);
+  max-height: min(640px, calc(100dvh - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--paper);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgb(0 0 0 / .35);
+}
+.lr-share-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.lr-share-dialog-head h2 { margin: 0; font-size: 16px; }
+.lr-share-dialog-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+}
+.lr-share-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 14px 16px;
+}
+.lr-share-tabs { display: flex; gap: 6px; }
+.lr-share-tabs button {
+  border: 0;
+  background: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.lr-share-tabs button.is-selected {
+  background: var(--control-selected);
+  color: var(--ink);
+  font-weight: 600;
+}
+.lr-share-source-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-content: start;
+  overflow: auto;
+  min-height: 0;
+}
+.lr-share-browser-card {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--muted);
+  cursor: pointer;
+}
+.lr-share-empty { color: var(--muted); font-size: 13px; }
+.lr-share-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  border-left: 1px solid var(--line);
+  background: var(--wall);
+}
+.lr-share-field { display: grid; gap: 8px; }
+.lr-share-label { font-size: 13px; font-weight: 650; }
+.lr-share-hint { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.lr-share-settings > .lr-btn { margin-top: auto; justify-content: center; }

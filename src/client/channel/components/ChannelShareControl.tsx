@@ -30,6 +30,7 @@ import { CaptureSourceCard } from "../../components/living/CaptureSourceCard";
 import { BrandLoader } from "../../components/living/BrandMark";
 import { Glyph } from "../../ui/icons";
 import { ShareStartOptions } from "./ShareStartOptions";
+import { ChannelShareDialog } from "./ChannelShareDialog";
 
 type PendingShare =
   | { kind: "native"; target: NativeCaptureTarget; audio: boolean; border: boolean; excludeAudio?: NativeCaptureTarget }
@@ -112,6 +113,7 @@ export function ChannelShareControl({ channel, roomId, publicationId, compact = 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [externalOpen, setExternalOpen] = useState(false);
   const [pending, setPending] = useState<PendingShare | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [sources, setSources] = useState<Exclude<NativeSourceList, { kind: "ready" }> | ({ kind: "ready" } & NativeCaptureSources)>({ kind: "browser" });
   const { appConnected, nativeSources, startNativeScreen, startScreen } = channel;
   const browserSupported = typeof navigator !== "undefined" && typeof navigator.mediaDevices?.getDisplayMedia === "function";
@@ -194,10 +196,12 @@ export function ChannelShareControl({ channel, roomId, publicationId, compact = 
   useEffect(() => { setPending(null); }, [roomId, publicationId]);
   useEffect(() => { setExternalOpen(false); }, [roomId]);
   useEffect(() => {
-    if (!openRequested || disabled || !panel.current) return;
+    if (!openRequested || disabled) return;
+    if (oneStep) { setDialogOpen(true); onPickerOpened?.(); return; }
+    if (!panel.current) return;
     panel.current.showPopover();
     onPickerOpened?.();
-  }, [openRequested, disabled, onPickerOpened]);
+  }, [openRequested, disabled, onPickerOpened, oneStep]);
   const start = (operation: () => Promise<void>) => {
     setPending(null);
     close();
@@ -249,8 +253,10 @@ export function ChannelShareControl({ channel, roomId, publicationId, compact = 
             onClick={() => activateNativePicker(captureRequest.activationURL)} />
         </span> : <Btn icon={sharing || watching ? "switchSource" : "cast"} title={{ text: sourceTitle }} cap={compact ? undefined : { text: label }} size="compact" tone={sharing || watching ? undefined : "primary"} quiet={compact}
         hint={sharing || watching ? "hint-switch-source" : "hint-share-start"}
-        disabled={disabled || busy || qualityPending || microphonePending} busy={busy || qualityPending} expanded={open}
-        controls={id} popoverTarget={id} />}
+        disabled={disabled || busy || qualityPending || microphonePending} busy={busy || qualityPending}
+        expanded={oneStep ? dialogOpen : open}
+        controls={oneStep ? undefined : id} popoverTarget={oneStep ? undefined : id}
+        onClick={oneStep ? () => setDialogOpen(true) : undefined} />}
       {cancellable && <Btn icon="x" title={preparation ? "host.capture.cancelPreparation" : "common.cancel"}
         cap={preparation ? "host.capture.cancelPreparation" : "common.cancel"} size="compact" quiet
         onClick={() => { void channel.cancelScreenSelection(roomId).catch(() => {}).finally(() => {
@@ -359,6 +365,7 @@ export function ChannelShareControl({ channel, roomId, publicationId, compact = 
           ? channel.stopScreen(externalInput.publicationId) : channel.cancelExternalScreen(roomId);
         void stopping.then(() => setExternalOpen(false)).catch(() => {});
       }} onClose={() => setExternalOpen(false)} />}
+    {oneStep && dialogOpen && <ChannelShareDialog channel={channel} roomId={roomId} onClose={() => setDialogOpen(false)} />}
   </>;
 }
 

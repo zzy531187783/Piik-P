@@ -340,3 +340,27 @@
   font-size: 11px;
   line-height: 1.6;
 }
+
+/* Channel-first workspace: channel list, stage over conversation, member roster. */
+.c3-shell[data-layout="workspace"] { grid-template-columns: var(--c3-navigation-size) minmax(0, 1fr) 240px; }
+.c3-shell[data-layout="workspace"] > .c3-room-heading { grid-column: 2; }
+.c3-shell[data-layout="workspace"] > .c3-main-body { grid-column: 2; }
+.c3-shell[data-layout="workspace"] > .c3-people-panel { grid-column: 3; grid-row: 2 / 5; border-left: 1px solid var(--line); }
+.c3-shell[data-layout="workspace"] .c3-workspace { display: flex; flex-direction: column; }
+.c3-shell[data-layout="workspace"] .c3-main-stage { flex: 0 1 46%; min-height: 0; display: flex; border-bottom: 1px solid var(--line); }
+.c3-shell[data-layout="workspace"] .c3-main-stage > .c3-monitor { flex: 1; min-height: 0; }
+.c3-shell[data-layout="workspace"] .c3-main-chat { flex: 1 1 auto; min-height: 0; display: flex; }
+.c3-shell[data-layout="workspace"] .c3-main-chat > * { flex: 1; min-width: 0; }
+.c3-guild-head { display: flex; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid var(--line); }
+.c3-guild-avatar { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 12px; background: var(--couch); color: #2a1c0c; }
+.c3-guild-copy { display: grid; min-width: 0; flex: 1; }
+.c3-guild-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c3-guild-copy small { color: var(--muted); font-size: 11px; }
+.c3-guild-nav { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: inherit; cursor: pointer; }
+.c3-guild-nav:hover, .c3-guild-nav.is-selected { background: var(--control-selected); color: var(--ink); }
+.c3-guild-nav > span { font-weight: 600; }
+.c3-channel-group { display: grid; gap: 2px; margin-top: 10px; }
+.c3-room-count { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.c3-shell[data-layout="workspace"] .c3-room-heading { grid-column: 2; }
+.c3-shell[data-layout="workspace"] .c3-main-body { grid-column: 2; }
+.c3-shell[data-layout="workspace"] .c3-people-panel { grid-column: 3; grid-row: 2 / 5; width: auto; max-width: none; border-left: 1px solid var(--line); }

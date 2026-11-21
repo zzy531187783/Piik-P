@@ -139,7 +139,8 @@ describe("shared App connection entry", () => {
     const html = renderToStaticMarkup(createElement(ChannelShareControl, { onWatch() {}, channel, roomId: "room", disabled: false }));
     const button = html.match(/<button\b[^>]*>/)![0];
     expect(button.includes("disabled")).toBe(false);
-    expect(button.toLowerCase().includes("popovertarget=")).toBe(true);
+    expect(button.toLowerCase().includes("popovertarget=")).toBe(false);
+    expect(button).toContain('aria-expanded="false"');
     expect(html.match(/<button\b/g)).toHaveLength(3);
     expect(html).toContain('aria-label="Close"');
     expect(html).toMatch(/aria-label="(?:Share settings|分享设置)"/);
@@ -263,6 +264,7 @@ describe("Native sharing capabilities", () => {
       vi.mocked(useState).mockReturnValueOnce([!settings, vi.fn()]).mockReturnValueOnce([settings, vi.fn()])
         .mockReturnValueOnce([false, vi.fn()])
         .mockReturnValueOnce([null, vi.fn()])
+        .mockReturnValueOnce([false, vi.fn()])
         .mockReturnValueOnce([sources, vi.fn()]);
       return renderToStaticMarkup(createElement(ChannelShareControl, { onWatch() {}, channel: channel as unknown as ChannelController,
         roomId: "room", publicationId: channel.ownedScreens.has("mine") ? "mine" : undefined, disabled: false }));
