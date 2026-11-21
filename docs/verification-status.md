@@ -15,7 +15,10 @@ room and decoded a synthetic screen from an independent browser on loopback.
 Closing the main window retired the observed WebView processes and listeners.
 On Alpine x64, the packaged Server accepted signed chat after the room creator
 left, retained the invited reader's grant and history on restart, and hid the
-room from a stranger. These runs used disposable data. Physical display capture,
+room from a stranger. A local Server run hosted two domains under `/d/<id>/`
+with their own rooms and identities; a domain rail switched between them, and a
+Server-hosted text channel kept chat without voice while a voice channel kept
+its join control. These runs used disposable data. Physical display capture,
 microphone capture and public-network conditions require their own checks.
 
 Three loopback Chromium sessions kept B’s screen playing through A while
